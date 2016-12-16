@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/wallix/awless/cloud/aws"
+	"github.com/wallix/awless/cloud/azure"
 	"github.com/wallix/awless/cmd"
 	"github.com/wallix/awless/config"
 )
@@ -18,6 +19,10 @@ func main() {
 	}
 
 	aws.InitServices(sess)
+
+	if sess, err := azure.InitSession(); err == nil {
+		azure.InitServices(sess)
+	}
 
 	cmd.InitCli()
 	cmd.ExecuteRoot()
