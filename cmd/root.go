@@ -39,11 +39,11 @@ func InitCli() {
 			go func() {
 				localInfra, localAccess := rdf.NewGraph(), rdf.NewGraph()
 				if !config.AwlessFirstSync {
-					localInfra, err = rdf.NewGraphFromFile(filepath.Join(config.GitDir, config.InfraFilename))
+					localInfra, err = rdf.NewGraphFromFile(filepath.Join(config.RepoDir, config.InfraFilename))
 					if err != nil {
 						db.AddLog(err.Error())
 					}
-					localAccess, err = rdf.NewGraphFromFile(filepath.Join(config.GitDir, config.AccessFilename))
+					localAccess, err = rdf.NewGraphFromFile(filepath.Join(config.RepoDir, config.AccessFilename))
 					if err != nil {
 						db.AddLog(err.Error())
 					}
