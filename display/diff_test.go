@@ -7,9 +7,21 @@ import (
 	"github.com/google/badwolf/triple"
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
+	"github.com/google/badwolf/triple/predicate"
 	"github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/graph"
 )
+
+var parentOfPredicate *predicate.Predicate
+
+func init() {
+	var err error
+
+	parentOfPredicate, err = predicate.NewImmutable("parent_of")
+	if err != nil {
+		panic(err)
+	}
+}
 
 func TestDisplayCommit(t *testing.T) {
 	g := graph.NewGraph()
@@ -27,10 +39,10 @@ func TestDisplayCommit(t *testing.T) {
 
 	diff := graph.NewDiff(g)
 
-	diff.AddDeleted(t2, graph.ParentOfPredicate)
-	diff.AddDeleted(t3, graph.ParentOfPredicate)
-	diff.AddDeleted(t5, graph.ParentOfPredicate)
-	diff.AddDeleted(t7bis, graph.ParentOfPredicate)
+	diff.AddDeleted(t2, parentOfPredicate)
+	diff.AddDeleted(t3, parentOfPredicate)
+	diff.AddDeleted(t5, parentOfPredicate)
+	diff.AddDeleted(t7bis, parentOfPredicate)
 	t8 := parseTriple(`/instance<inst_1>	"property"@[]	"{"Key":"Id","Value":"new_id"}"^^type:text`)
 	t9 := parseTriple(`/region<eu-west-1>  "parent_of"@[] /instance<inst_3>`)
 	t10 := parseTriple(`/instance<inst_3>	"has_type"@[]	"/instance"^^type:text`)
@@ -42,17 +54,17 @@ func TestDisplayCommit(t *testing.T) {
 	t16 := parseTriple(`/instance<inst_5>	"has_type"@[]	"/instance"^^type:text`)
 	t17 := parseTriple(`/region<eu-west-1>  "parent_of"@[] /subnet<test_1>`)
 	t18 := parseTriple(`/subnet<test_1>	"property"@[]	"{"Key":"prop","Value":"val"}"^^type:text`)
-	diff.AddInserted(t8, graph.ParentOfPredicate)
-	diff.AddInserted(t9, graph.ParentOfPredicate)
-	diff.AddInserted(t10, graph.ParentOfPredicate)
-	diff.AddInserted(t11, graph.ParentOfPredicate)
-	diff.AddInserted(t12, graph.ParentOfPredicate)
-	diff.AddInserted(t13, graph.ParentOfPredicate)
-	diff.AddInserted(t14, graph.ParentOfPredicate)
-	diff.AddInserted(t15, graph.ParentOfPredicate)
-	diff.AddInserted(t16, graph.ParentOfPredicate)
-	diff.AddInserted(t17, graph.ParentOfPredicate)
-	diff.AddInserted(t18, graph.ParentOfPredicate)
+	diff.AddInserted(t8, parentOfPredicate)
+	diff.AddInserted(t9, parentOfPredicate)
+	diff.AddInserted(t10, parentOfPredicate)
+	diff.AddInserted(t11, parentOfPredicate)
+	diff.AddInserted(t12, parentOfPredicate)
+	diff.AddInserted(t13, parentOfPredicate)
+	diff.AddInserted(t14, parentOfPredicate)
+	diff.AddInserted(t15, parentOfPredicate)
+	diff.AddInserted(t16, parentOfPredicate)
+	diff.AddInserted(t17, parentOfPredicate)
+	diff.AddInserted(t18, parentOfPredicate)
 
 	rootNode, err := node.NewNodeFromStrings(graph.Region.ToRDFString(), "eu-west-1")
 	if err != nil {

@@ -12,7 +12,7 @@ func SeveralResourcesOfGraph(g *graph.Graph, displayer *ServiceDisplayer, onlyID
 	table := NewTable([]*PropertyDisplayer{{Property: "Type", DontTruncate: true}, {Property: "Name/Id", DontTruncate: true}, {Property: "Property", DontTruncate: true}, {Property: "Value", DontTruncate: true}})
 	table.MergeIdenticalCells = true
 	for t := range displayer.Resources {
-		nodes, err := g.NodesForType(t)
+		nodes, err := g.NodesForType(t.ToRDFString())
 		if err != nil {
 			fmt.Println(err.Error())
 			return

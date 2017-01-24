@@ -50,3 +50,7 @@ func (g *Graph) CountChildrenOfTypeForNode(node *node.Node, childType ResourceTy
 func (g *Graph) CountChildrenForNode(node *node.Node) (int, error) {
 	return g.CountTriplesForSubjectAndPredicate(node, rdf.ParentOfPredicate)
 }
+
+func (g *Graph) TriplesInDiff(node *node.Node) ([]*triple.Triple, error) {
+	return g.TriplesForSubjectPredicate(node, rdf.DiffPredicate)
+}

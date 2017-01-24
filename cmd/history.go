@@ -107,7 +107,7 @@ func compareRev(root *node.Node, revs revPair) {
 
 func printWithDiff(g *graph.Graph, n *node.Node, distance int) {
 	var lit *literal.Literal
-	diff, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
+	diff, err := g.TriplesInDiff(n)
 	if len(diff) > 0 && err == nil {
 		lit, _ = diff[0].Object().Literal()
 	}

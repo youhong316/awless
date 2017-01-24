@@ -25,7 +25,7 @@ func FullDiff(diff *graph.Diff, rootNode *node.Node, cloudService string) {
 func ResourceDiff(diff *graph.Diff, rootNode *node.Node) {
 	diff.FullGraph().Visit(rootNode, func(g *graph.Graph, n *node.Node, distance int) {
 		var lit *literal.Literal
-		diff, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
+		diff, err := g.TriplesInDiff(n)
 		if len(diff) > 0 && err == nil {
 			lit, _ = diff[0].Object().Literal()
 		}
@@ -35,12 +35,17 @@ func ResourceDiff(diff *graph.Diff, rootNode *node.Node) {
 			tabs.WriteByte('\t')
 		}
 
-		switch lit {
-		case graph.ExtraLiteral:
+		var litString string
+		if lit != nil {
+			litString, _ = lit.Text()
+		}
+
+		switch litString {
+		case "extra":
 			color.Set(color.FgGreen)
 			fmt.Fprintf(os.Stdout, "+%s%s, %s\n", tabs.String(), graph.NewResourceType(n.Type()).String(), n.ID())
 			color.Unset()
-		case graph.MissingLiteral:
+		case "missing":
 			color.Set(color.FgRed)
 			fmt.Fprintf(os.Stdout, "-%s%s, %s\n", tabs.String(), graph.NewResourceType(n.Type()).String(), n.ID())
 			color.Unset()
@@ -61,7 +66,7 @@ func tableFromDiff(diff *graph.Diff, rootNode *node.Node, service string) (*Tabl
 
 	err := diff.FullGraph().VisitUnique(rootNode, func(g *graph.Graph, n *node.Node, distance int) error {
 		var lit *literal.Literal
-		diffTriples, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
+		diffTriples, err := g.TriplesInDiff(n)
 		if len(diffTriples) > 0 && err == nil {
 			lit, _ = diffTriples[0].Object().Literal()
 		}
@@ -85,12 +90,17 @@ func tableFromDiff(diff *graph.Diff, rootNode *node.Node, service string) (*Tabl
 		var displayProperties, propsChanges, rNew bool
 		var rName string
 
-		switch lit {
-		case graph.ExtraLiteral:
+		var litString string
+		if lit != nil {
+			litString, _ = lit.Text()
+		}
+
+		switch litString {
+		case "extra":
 			displayProperties = true
 			rNew = true
 			rName = nameOrID(nInserted)
-		case graph.MissingLiteral:
+		case "missing":
 			rName = nameOrID(nDeleted)
 			table.AddRow(
 				graph.NewResourceType(n.Type()).String(),
