@@ -27,6 +27,22 @@ func NewRegionTypeTriple(subject *node.Node) (*triple.Triple, error) {
 	return triple.New(subject, rdf.HasTypePredicate, triple.NewLiteralObject(rdf.RegionLiteral))
 }
 
+func (g *Graph) Visit(root *node.Node, each func(*Graph, *node.Node, int), distances ...int) error {
+	foreach := func(g *rdf.Graph, n *node.Node, i int) {
+		each(&Graph{g}, n, i)
+	}
+
+	return g.VisitDepthFirst(root, foreach, distances...)
+}
+
+func (g *Graph) VisitUnique(root *node.Node, each func(*Graph, *node.Node, int) error) error {
+	foreach := func(g *rdf.Graph, n *node.Node, i int) error {
+		return each(&Graph{g}, n, i)
+	}
+
+	return g.VisitDepthFirstUnique(root, foreach)
+}
+
 func (g *Graph) CountChildrenOfTypeForNode(node *node.Node, childType ResourceType) (int, error) {
 	return g.CountTriplesForSubjectAndPredicateObjectOfType(node, rdf.ParentOfPredicate, childType.ToRDFString())
 }

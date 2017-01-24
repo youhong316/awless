@@ -6,4 +6,12 @@ type Diff struct {
 	*rdf.Diff
 }
 
+func NewDiff(g *Graph) *Diff {
+	return &Diff{rdf.NewDiff(g.Graph)}
+}
+
+func (d *Diff) FullGraph() *Graph {
+	return &Graph{d.Diff.FullGraph()}
+}
+
 var DefaultDiffer = rdf.DefaultDiffer

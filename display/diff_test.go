@@ -8,9 +8,11 @@ import (
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
 	"github.com/wallix/awless/cloud/aws"
+	"github.com/wallix/awless/graph"
 )
 
 func TestDisplayCommit(t *testing.T) {
+	g := graph.NewGraph()
 	t0 := parseTriple(`/region<eu-west-1>	"has_type"@[]	"/region"^^type:text`)
 	t1 := parseTriple(`/instance<inst_1>	"has_type"@[]	"/instance"^^type:text`)
 	t2 := parseTriple(`/instance<inst_1>	"property"@[]	"{"Key":"Id","Value":"inst_1"}"^^type:text`)
@@ -20,8 +22,11 @@ func TestDisplayCommit(t *testing.T) {
 	t6 := parseTriple(`/region<eu-west-1>  "parent_of"@[] /vpc<vpc_1>`)
 	t7 := parseTriple(`/vpc<vpc_1>  "parent_of"@[] /instance<inst_1>`)
 	t7bis := parseTriple(`/instance<inst_1>	"property"@[]	"{"Key":"Deleted","Value":"del_1"}"^^type:text`)
-	graph := graph.NewGraphFromTriples([]*triple.Triple{t0, t1, t2, t3, t4, t5, t6, t7, t7bis})
-	diff := graph.NewEmptyDiffFromGraph(graph)
+
+	g.Add(t0, t1, t2, t3, t4, t5, t6, t7, t7bis)
+
+	diff := graph.NewDiff(g)
+
 	diff.AddDeleted(t2, graph.ParentOfPredicate)
 	diff.AddDeleted(t3, graph.ParentOfPredicate)
 	diff.AddDeleted(t5, graph.ParentOfPredicate)

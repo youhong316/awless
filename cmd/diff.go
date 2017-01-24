@@ -12,6 +12,7 @@ import (
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
 	"github.com/wallix/awless/display"
+	"github.com/wallix/awless/graph"
 )
 
 var diffProperties bool

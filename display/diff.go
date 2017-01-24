@@ -8,7 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
-	"github.com/wallix/awless/cloud"
+	"github.com/wallix/awless/graph"
 )
 
 // FullDiff displays a table of a diff with both resources and properties diffs (inserted and deleted triples)
@@ -23,7 +23,7 @@ func FullDiff(diff *graph.Diff, rootNode *node.Node, cloudService string) {
 
 // ResourceDiff displays a tree view of a diff with only the changed resources
 func ResourceDiff(diff *graph.Diff, rootNode *node.Node) {
-	diff.FullGraph().VisitDepthFirst(rootNode, func(g *graph.Graph, n *node.Node, distance int) {
+	diff.FullGraph().Visit(rootNode, func(g *graph.Graph, n *node.Node, distance int) {
 		var lit *literal.Literal
 		diff, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
 		if len(diff) > 0 && err == nil {
@@ -59,25 +59,25 @@ func tableFromDiff(diff *graph.Diff, rootNode *node.Node, service string) (*Tabl
 	})
 	table.MergeIdenticalCells = true
 
-	err := diff.FullGraph().VisitDepthFirstUnique(rootNode, func(g *graph.Graph, n *node.Node, distance int) error {
+	err := diff.FullGraph().VisitUnique(rootNode, func(g *graph.Graph, n *node.Node, distance int) error {
 		var lit *literal.Literal
 		diffTriples, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
 		if len(diffTriples) > 0 && err == nil {
 			lit, _ = diffTriples[0].Object().Literal()
 		}
-		nCommon, nInserted, nDeleted := cloud.InitFromRdfNode(n), cloud.InitFromRdfNode(n), cloud.InitFromRdfNode(n)
+		nCommon, nInserted, nDeleted := graph.InitFromRdfNode(n), graph.InitFromRdfNode(n), graph.InitFromRdfNode(n)
 
-		err = nCommon.UnmarshalFromGraph(diff.CommonGraph())
+		err = nCommon.UnmarshalFromGraph(&graph.Graph{diff.CommonGraph()})
 		if err != nil {
 			return err
 		}
 
-		err = nInserted.UnmarshalFromGraph(diff.InsertedGraph())
+		err = nInserted.UnmarshalFromGraph(&graph.Graph{diff.InsertedGraph()})
 		if err != nil {
 			return err
 		}
 
-		err = nDeleted.UnmarshalFromGraph(diff.DeletedGraph())
+		err = nDeleted.UnmarshalFromGraph(&graph.Graph{diff.DeletedGraph()})
 		if err != nil {
 			return err
 		}
@@ -119,7 +119,7 @@ func tableFromDiff(diff *graph.Diff, rootNode *node.Node, service string) (*Tabl
 	return table, nil
 }
 
-func addDiffProperties(table *Table, service string, rType graph.ResourceType, rName string, rNew bool, insertedProps, deletedProps cloud.Properties) (bool, error) {
+func addDiffProperties(table *Table, service string, rType graph.ResourceType, rName string, rNew bool, insertedProps, deletedProps graph.Properties) (bool, error) {
 	visitedInsertedProp, visitedDeletedProp := make(map[string]bool), make(map[string]bool)
 	changes := false
 

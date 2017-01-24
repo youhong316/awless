@@ -12,7 +12,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	"github.com/wallix/awless/cloud"
 	"github.com/wallix/awless/graph"
 )
 
@@ -69,9 +68,9 @@ func (b *Builder) Build() Displayer {
 			dis.SetGraph(b.source.(*graph.Graph))
 			return dis
 		}
-	case *cloud.Resource:
+	case *graph.Resource:
 		dis := &tableResourceDisplayer{headers: b.headers}
-		dis.SetResource(b.source.(*cloud.Resource))
+		dis.SetResource(b.source.(*graph.Resource))
 		return dis
 	}
 
@@ -167,7 +166,7 @@ type csvDisplayer struct {
 }
 
 func (d *csvDisplayer) Print(w io.Writer) error {
-	resources, err := cloud.LoadResourcesFromGraph(d.g, d.rdfType)
+	resources, err := graph.LoadResourcesFromGraph(d.g, d.rdfType)
 	if err != nil {
 		return err
 	}
@@ -214,7 +213,7 @@ type tableDisplayer struct {
 }
 
 func (d *tableDisplayer) Print(w io.Writer) error {
-	resources, err := cloud.LoadResourcesFromGraph(d.g, d.rdfType)
+	resources, err := graph.LoadResourcesFromGraph(d.g, d.rdfType)
 	if err != nil {
 		return err
 	}
@@ -289,7 +288,7 @@ type porcelainDisplayer struct {
 }
 
 func (d *porcelainDisplayer) Print(w io.Writer) error {
-	resources, err := cloud.LoadResourcesFromGraph(d.g, d.rdfType)
+	resources, err := graph.LoadResourcesFromGraph(d.g, d.rdfType)
 	if err != nil {
 		return err
 	}
