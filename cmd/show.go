@@ -26,10 +26,10 @@ var (
 
 func init() {
 	//Resources
-	for _, resource := range []rdf.ResourceType{rdf.Instance, rdf.Vpc, rdf.Subnet} {
+	for _, resource := range []graph.ResourceType{rdf.Instance, rdf.Vpc, rdf.Subnet} {
 		showCmd.AddCommand(showInfraResourceCmd(resource))
 	}
-	for _, resource := range []rdf.ResourceType{rdf.User, rdf.Role, rdf.Policy, rdf.Group} {
+	for _, resource := range []graph.ResourceType{rdf.User, rdf.Role, rdf.Policy, rdf.Group} {
 		showCmd.AddCommand(showAccessResourceCmd(resource))
 	}
 
@@ -51,7 +51,7 @@ var showCmd = &cobra.Command{
 	PersistentPostRun: saveHistoryFn,
 }
 
-var showInfraResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
+var showInfraResourceCmd = func(resourceType graph.ResourceType) *cobra.Command {
 	command := &cobra.Command{
 		Use:   resourceType.String() + " id",
 		Short: "Show the properties of a AWS EC2 " + resourceType.String(),
@@ -61,7 +61,7 @@ var showInfraResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
 				return fmt.Errorf("id required")
 			}
 			id := args[0]
-			var g *rdf.Graph
+			var g *graph.Graph
 			var err error
 			if localResources {
 				g, err = config.LoadInfraGraph()
@@ -79,7 +79,7 @@ var showInfraResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
 	return command
 }
 
-var showAccessResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
+var showAccessResourceCmd = func(resourceType graph.ResourceType) *cobra.Command {
 	command := &cobra.Command{
 		Use:   resourceType.String() + " id",
 		Short: "Show the properties of a AWS IAM " + resourceType.String(),
@@ -89,7 +89,7 @@ var showAccessResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
 				return fmt.Errorf("id required")
 			}
 			id := args[0]
-			var g *rdf.Graph
+			var g *graph.Graph
 			var err error
 			if localResources {
 				g, err = config.LoadAccessGraph()
@@ -107,7 +107,7 @@ var showAccessResourceCmd = func(resourceType rdf.ResourceType) *cobra.Command {
 	return command
 }
 
-func printResource(g *rdf.Graph, resourceType rdf.ResourceType, id string) {
+func printResource(g *graph.Graph, resourceType rdf.ResourceType, id string) {
 	a := alias.Alias(id)
 	if aID, ok := a.ResolveToId(g, resourceType); ok {
 		id = aID
@@ -136,7 +136,7 @@ var showCloudRevisionsCmd = &cobra.Command{
 	Short: "Show cloud revision history",
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		root, err := node.NewNodeFromStrings(rdf.Region.ToRDFString(), database.MustGetDefaultRegion())
+		root, err := node.NewNodeFromStrings(graph.Region.ToRDFString(), database.MustGetDefaultRegion())
 		if err != nil {
 			return err
 		}

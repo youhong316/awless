@@ -9,7 +9,7 @@ import (
 type Diff struct {
 	From      *Revision
 	To        *Revision
-	GraphDiff *rdf.Diff
+	GraphDiff *graph.Diff
 }
 
 func (rr *Repository) newDiff(from, to *Revision, root *node.Node, forFiles []string) (*Diff, error) {
@@ -21,7 +21,7 @@ func (rr *Repository) newDiff(from, to *Revision, root *node.Node, forFiles []st
 	if err != nil {
 		return nil, err
 	}
-	diff, err := rdf.DefaultDiffer.Run(root, toG, fromG)
+	diff, err := graph.DefaultDiffer.Run(root, toG, fromG)
 	if err != nil {
 		return nil, err
 	}

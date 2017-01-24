@@ -23,7 +23,7 @@ type Displayer interface {
 
 type GraphDisplayer interface {
 	Displayer
-	SetGraph(*rdf.Graph)
+	SetGraph(*graph.Graph)
 }
 
 type sorter interface {
@@ -34,7 +34,7 @@ type sorter interface {
 type Builder struct {
 	headers  []ColumnDefinition
 	format   string
-	rdfType  rdf.ResourceType
+	rdfType  graph.ResourceType
 	sort     []int
 	maxwidth int
 	source   interface{}
@@ -49,24 +49,24 @@ func (b *Builder) Build() Displayer {
 	base := fromGraphDisplayer{sorter: &defaultSorter{sortBy: b.sort}, rdfType: b.rdfType, headers: b.headers, maxwidth: b.maxwidth}
 
 	switch b.source.(type) {
-	case *rdf.Graph:
+	case *graph.Graph:
 		switch b.format {
 		case "csv":
 			dis := &csvDisplayer{base}
-			dis.SetGraph(b.source.(*rdf.Graph))
+			dis.SetGraph(b.source.(*graph.Graph))
 			return dis
 		case "porcelain":
 			dis := &porcelainDisplayer{base}
-			dis.SetGraph(b.source.(*rdf.Graph))
+			dis.SetGraph(b.source.(*graph.Graph))
 			return dis
 		case "table":
 			dis := &tableDisplayer{base}
-			dis.SetGraph(b.source.(*rdf.Graph))
+			dis.SetGraph(b.source.(*graph.Graph))
 			return dis
 		default:
 			fmt.Fprintf(os.Stderr, "unknown format '%s', display as 'table'\n", b.format)
 			dis := &tableDisplayer{base}
-			dis.SetGraph(b.source.(*rdf.Graph))
+			dis.SetGraph(b.source.(*graph.Graph))
 			return dis
 		}
 	case *cloud.Resource:
@@ -145,7 +145,7 @@ func WithMaxWidth(maxwidth int) optsFn {
 	}
 }
 
-func WithRdfType(rdfType rdf.ResourceType) optsFn {
+func WithRdfType(rdfType graph.ResourceType) optsFn {
 	return func(b *Builder) *Builder {
 		b.rdfType = rdfType
 		return b
@@ -156,8 +156,8 @@ type table [][]interface{}
 
 type fromGraphDisplayer struct {
 	sorter
-	g        *rdf.Graph
-	rdfType  rdf.ResourceType
+	g        *graph.Graph
+	rdfType  graph.ResourceType
 	headers  []ColumnDefinition
 	maxwidth int
 }
@@ -205,7 +205,7 @@ func (d *csvDisplayer) Print(w io.Writer) error {
 	return err
 }
 
-func (d *csvDisplayer) SetGraph(g *rdf.Graph) {
+func (d *csvDisplayer) SetGraph(g *graph.Graph) {
 	d.g = g
 }
 
@@ -280,7 +280,7 @@ func (d *tableDisplayer) Print(w io.Writer) error {
 	return nil
 }
 
-func (d *tableDisplayer) SetGraph(g *rdf.Graph) {
+func (d *tableDisplayer) SetGraph(g *graph.Graph) {
 	d.g = g
 }
 
@@ -321,7 +321,7 @@ func (d *porcelainDisplayer) Print(w io.Writer) error {
 	return err
 }
 
-func (d *porcelainDisplayer) SetGraph(g *rdf.Graph) {
+func (d *porcelainDisplayer) SetGraph(g *graph.Graph) {
 	d.g = g
 }
 

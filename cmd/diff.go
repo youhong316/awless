@@ -58,7 +58,7 @@ var diffCmd = &cobra.Command{
 
 		region := database.MustGetDefaultRegion()
 
-		root, err := node.NewNodeFromStrings(rdf.Region.ToRDFString(), region)
+		root, err := node.NewNodeFromStrings(graph.Region.ToRDFString(), region)
 		exitOn(err)
 
 		localInfra, err := config.LoadInfraGraph()
@@ -67,7 +67,7 @@ var diffCmd = &cobra.Command{
 		remoteInfra, err := aws.BuildAwsInfraGraph(region, awsInfra)
 		exitOn(err)
 
-		infraDiff, err := rdf.DefaultDiffer.Run(root, localInfra, remoteInfra)
+		infraDiff, err := graph.DefaultDiffer.Run(root, localInfra, remoteInfra)
 		exitOn(err)
 
 		localAccess, err := config.LoadAccessGraph()
@@ -76,7 +76,7 @@ var diffCmd = &cobra.Command{
 		remoteAccess, err := aws.BuildAwsAccessGraph(region, awsAccess)
 		exitOn(err)
 
-		accessDiff, err := rdf.DefaultDiffer.Run(root, localAccess, remoteAccess)
+		accessDiff, err := graph.DefaultDiffer.Run(root, localAccess, remoteAccess)
 		exitOn(err)
 
 		var hasDiff bool

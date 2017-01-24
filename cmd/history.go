@@ -38,7 +38,7 @@ var historyCmd = &cobra.Command{
 		all, err := rep.List()
 		exitOn(err)
 
-		root, err := node.NewNodeFromStrings(rdf.Region.ToRDFString(), database.MustGetDefaultRegion())
+		root, err := node.NewNodeFromStrings(graph.Region.ToRDFString(), database.MustGetDefaultRegion())
 		if err != nil {
 			return err
 		}
@@ -85,10 +85,10 @@ var historyCmd = &cobra.Command{
 func compareRev(root *node.Node, revs revPair) {
 	rev1, rev2 := revs[0], revs[1]
 
-	infraDiff, err := rdf.NewHierarchicalDiffer().Run(root, rev1.Infra, rev2.Infra)
+	infraDiff, err := graph.NewHierarchicalDiffer().Run(root, rev1.Infra, rev2.Infra)
 	exitOn(err)
 
-	accessDiff, err := rdf.NewHierarchicalDiffer().Run(root, rev1.Access, rev2.Access)
+	accessDiff, err := graph.NewHierarchicalDiffer().Run(root, rev1.Access, rev2.Access)
 	exitOn(err)
 
 	if infraDiff.HasDiff() || accessDiff.HasDiff() {
@@ -106,19 +106,19 @@ func compareRev(root *node.Node, revs revPair) {
 	}
 }
 
-func printWithDiff(g *rdf.Graph, n *node.Node, distance int) {
+func printWithDiff(g *graph.Graph, n *node.Node, distance int) {
 	var lit *literal.Literal
-	diff, err := g.TriplesForSubjectPredicate(n, rdf.DiffPredicate)
+	diff, err := g.TriplesForSubjectPredicate(n, graph.DiffPredicate)
 	if len(diff) > 0 && err == nil {
 		lit, _ = diff[0].Object().Literal()
 	}
 
 	switch lit {
-	case rdf.ExtraLiteral:
+	case graph.ExtraLiteral:
 		color.Set(color.FgRed)
 		fmt.Fprintf(os.Stdout, "\t%s, %s\n", n.Type(), n.ID())
 		color.Unset()
-	case rdf.MissingLiteral:
+	case graph.MissingLiteral:
 		color.Set(color.FgGreen)
 		fmt.Fprintf(os.Stdout, "\t%s, %s\n", n.Type(), n.ID())
 		color.Unset()

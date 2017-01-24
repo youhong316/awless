@@ -7,13 +7,13 @@ import (
 
 type Alias string
 
-func (a Alias) ResolveToId(g *rdf.Graph, resT rdf.ResourceType) (string, bool) {
+func (a Alias) ResolveToId(g *graph.Graph, resT rdf.ResourceType) (string, bool) {
 	prop := cloud.Property{Key: "Name", Value: a}
 	propL, err := prop.ToLiteralObject()
 	if err != nil {
 		return "", false
 	}
-	triples, err := g.TriplesForPredicateObject(rdf.PropertyPredicate, propL)
+	triples, err := g.TriplesForPredicateObject(graph.PropertyPredicate, propL)
 	if err != nil {
 		return "", false
 	}

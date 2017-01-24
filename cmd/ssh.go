@@ -41,7 +41,7 @@ var sshCmd = &cobra.Command{
 		exitOn(err)
 
 		a := alias.Alias(instanceID)
-		if id, ok := a.ResolveToId(instancesGraph, rdf.Instance); ok {
+		if id, ok := a.ResolveToId(instancesGraph, graph.Instance); ok {
 			instanceID = id
 		}
 

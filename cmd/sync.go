@@ -35,7 +35,7 @@ var syncCmd = &cobra.Command{
 		}
 
 		if verboseFlag {
-			printWithTabs := func(g *rdf.Graph, n *node.Node, distance int) {
+			printWithTabs := func(g *graph.Graph, n *node.Node, distance int) {
 				var tabs bytes.Buffer
 				for i := 0; i < distance; i++ {
 					tabs.WriteByte('\t')
@@ -56,7 +56,7 @@ var syncCmd = &cobra.Command{
 	},
 }
 
-func performSync(region string) (*rdf.Graph, *rdf.Graph, error) {
+func performSync(region string) (*graph.Graph, *rdf.Graph, error) {
 	var awsInfra *aws.AwsInfra
 	var awsAccess *aws.AwsAccess
 

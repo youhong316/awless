@@ -64,8 +64,8 @@ func generateRevisionPairs(revisions []*Revision, param fetchParameter) []*revis
 	return res
 }
 
-func (rr *Repository) revisionToRDFGraph(revision *Revision, files ...string) (*rdf.Graph, error) {
-	g := rdf.NewGraph()
+func (rr *Repository) revisionToRDFGraph(revision *Revision, files ...string) (*graph.Graph, error) {
+	g := graph.NewGraph()
 	if revision == initRevision {
 		return g, nil
 	}

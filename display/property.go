@@ -18,8 +18,8 @@ var (
 	PropertiesDisplayer = AwlessResourcesDisplayer{
 		Services: map[string]*ServiceDisplayer{
 			aws.InfraServiceName: &ServiceDisplayer{
-				Resources: map[rdf.ResourceType]*RDisplayer{
-					rdf.Instance: &RDisplayer{
+				Resources: map[graph.ResourceType]*RDisplayer{
+					graph.Instance: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "Tags[].Name", Label: "Name"},
@@ -29,7 +29,7 @@ var (
 							{Property: "PublicIp", Label: "Public Ip"},
 						},
 					},
-					rdf.Vpc: &RDisplayer{
+					graph.Vpc: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "IsDefault", Label: "Default", ColoredValues: map[string]string{"true": "green"}},
@@ -37,7 +37,7 @@ var (
 							{Property: "CidrBlock"},
 						},
 					},
-					rdf.Subnet: &RDisplayer{
+					graph.Subnet: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "MapPublicIpOnLaunch", Label: "Public VMs", ColoredValues: map[string]string{"true": "yellow"}},
@@ -48,8 +48,8 @@ var (
 				},
 			},
 			aws.AccessServiceName: &ServiceDisplayer{
-				Resources: map[rdf.ResourceType]*RDisplayer{
-					rdf.User: &RDisplayer{
+				Resources: map[graph.ResourceType]*RDisplayer{
+					graph.User: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "Name"},
@@ -58,7 +58,7 @@ var (
 							{Property: "PasswordLastUsed"},
 						},
 					},
-					rdf.Role: &RDisplayer{
+					graph.Role: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "Name"},
@@ -67,7 +67,7 @@ var (
 							{Property: "Path"},
 						},
 					},
-					rdf.Policy: &RDisplayer{
+					graph.Policy: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "Name"},
@@ -79,7 +79,7 @@ var (
 							{Property: "Path"},
 						},
 					},
-					rdf.Group: &RDisplayer{
+					graph.Group: &RDisplayer{
 						Properties: []*PropertyDisplayer{
 							{Property: "Id"},
 							{Property: "Name"},
@@ -101,7 +101,7 @@ type AwlessResourcesDisplayer struct {
 
 // ServiceDisplayer contains how to display the resources of a cloud service
 type ServiceDisplayer struct {
-	Resources map[rdf.ResourceType]*RDisplayer
+	Resources map[graph.ResourceType]*RDisplayer
 }
 
 // RDisplayer contains how to display the properties of a cloud resource

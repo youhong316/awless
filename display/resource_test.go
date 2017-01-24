@@ -19,9 +19,9 @@ func TestResourceDisplay(t *testing.T) {
 	t6 := parseTriple(`/instance<inst_2>	"has_type"@[]	"/instance"^^type:text`)
 	t7 := parseTriple(`/region<eu-west-1>  "parent_of"@[] /instance<inst_1>`)
 	t8 := parseTriple(`/region<eu-west-1>  "parent_of"@[] /instance<inst_2>`)
-	g := rdf.NewGraphFromTriples([]*triple.Triple{t0, t1, t2, t3, t4, t5, t6, t7, t8})
+	g := graph.NewGraphFromTriples([]*triple.Triple{t0, t1, t2, t3, t4, t5, t6, t7, t8})
 
-	r := cloud.InitResource("inst_1", rdf.Instance)
+	r := cloud.InitResource("inst_1", graph.Instance)
 	r.UnmarshalFromGraph(g)
 
 	headers := []ColumnDefinition{

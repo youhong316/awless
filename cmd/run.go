@@ -183,7 +183,7 @@ func addAliasesToParams(expr *ast.ExpressionNode) error {
 		} else {
 			t = strings.Split(k, ".")[1]
 		}
-		rT := rdf.ResourceType(t)
+		rT := graph.ResourceType(t)
 		a := alias.Alias(v)
 		if id, ok := a.ResolveToId(infra, rT); ok {
 			expr.Params[k] = id
