@@ -14,4 +14,5 @@ func (d *Diff) FullGraph() *Graph {
 	return &Graph{d.Diff.FullGraph()}
 }
 
+var HierarchicalDiffer = rdf.NewHierarchicalDiffer()
 var DefaultDiffer = rdf.DefaultDiffer

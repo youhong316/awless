@@ -10,6 +10,7 @@ import (
 	"github.com/google/badwolf/triple/node"
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless/database"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/revision/repo"
 )
 
@@ -84,22 +85,24 @@ var historyCmd = &cobra.Command{
 func compareRev(root *node.Node, revs revPair) {
 	rev1, rev2 := revs[0], revs[1]
 
-	infraDiff, err := graph.NewHierarchicalDiffer().Run(root, rev1.Infra, rev2.Infra)
+	infraDiff, err := graph.HierarchicalDiffer.Run(root, rev1.Infra.Graph, rev2.Infra.Graph)
 	exitOn(err)
 
-	accessDiff, err := graph.NewHierarchicalDiffer().Run(root, rev1.Access, rev2.Access)
+	accessDiff, err := graph.HierarchicalDiffer.Run(root, rev1.Access.Graph, rev2.Access.Graph)
 	exitOn(err)
 
 	if infraDiff.HasDiff() || accessDiff.HasDiff() {
 		fmt.Println(fmt.Sprintf("FROM [%s] TO [%s]", rev1.DateString(), rev2.DateString()))
 		if infraDiff.HasDiff() {
 			fmt.Println("INFRA:")
-			infraDiff.FullGraph().VisitDepthFirst(root, printWithDiff)
+			g := &graph.Graph{infraDiff.FullGraph()}
+			g.Visit(root, printWithDiff)
 		}
 		if accessDiff.HasDiff() {
 			fmt.Println()
 			fmt.Println("ACCESS:")
-			accessDiff.FullGraph().VisitDepthFirst(root, printWithDiff)
+			g := &graph.Graph{accessDiff.FullGraph()}
+			g.Visit(root, printWithDiff)
 		}
 		fmt.Println()
 	}
@@ -112,12 +115,17 @@ func printWithDiff(g *graph.Graph, n *node.Node, distance int) {
 		lit, _ = diff[0].Object().Literal()
 	}
 
-	switch lit {
-	case graph.ExtraLiteral:
+	var litString string
+	if lit != nil {
+		litString, _ = lit.Text()
+	}
+
+	switch litString {
+	case "extra":
 		color.Set(color.FgRed)
 		fmt.Fprintf(os.Stdout, "\t%s, %s\n", n.Type(), n.ID())
 		color.Unset()
-	case graph.MissingLiteral:
+	case "missing":
 		color.Set(color.FgGreen)
 		fmt.Fprintf(os.Stdout, "\t%s, %s\n", n.Type(), n.ID())
 		color.Unset()

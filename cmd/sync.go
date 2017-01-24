@@ -48,8 +48,8 @@ var syncCmd = &cobra.Command{
 				return err
 			}
 
-			infrag.VisitDepthFirst(root, printWithTabs)
-			accessg.VisitDepthFirst(root, printWithTabs)
+			infrag.Visit(root, printWithTabs)
+			accessg.Visit(root, printWithTabs)
 		}
 
 		return nil
