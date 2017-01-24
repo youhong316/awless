@@ -13,7 +13,7 @@ import (
 	"github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/revision/repo"
 )
 
@@ -56,7 +56,7 @@ var syncCmd = &cobra.Command{
 	},
 }
 
-func performSync(region string) (*graph.Graph, *rdf.Graph, error) {
+func performSync(region string) (*graph.Graph, *graph.Graph, error) {
 	var awsInfra *aws.AwsInfra
 	var awsAccess *aws.AwsAccess
 

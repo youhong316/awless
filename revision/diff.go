@@ -1,9 +1,6 @@
 package revision
 
-import (
-	"github.com/google/badwolf/triple/node"
-	"github.com/wallix/awless/rdf"
-)
+import "github.com/google/badwolf/triple/node"
 
 // Diff represents the deleted/inserted RDF triples of a revision
 type Diff struct {

@@ -1,13 +1,10 @@
 package alias
 
-import (
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/rdf"
-)
+import "github.com/wallix/awless/cloud"
 
 type Alias string
 
-func (a Alias) ResolveToId(g *graph.Graph, resT rdf.ResourceType) (string, bool) {
+func (a Alias) ResolveToId(g *graph.Graph, resT graph.ResourceType) (string, bool) {
 	prop := cloud.Property{Key: "Name", Value: a}
 	propL, err := prop.ToLiteralObject()
 	if err != nil {

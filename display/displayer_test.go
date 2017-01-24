@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 func init() {

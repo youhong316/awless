@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/badwolf/triple"
 	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/rdf"
 )
 
 func TestResourceDisplay(t *testing.T) {

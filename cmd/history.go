@@ -10,7 +10,6 @@ import (
 	"github.com/google/badwolf/triple/node"
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless/database"
-	"github.com/wallix/awless/rdf"
 	"github.com/wallix/awless/revision/repo"
 )
 

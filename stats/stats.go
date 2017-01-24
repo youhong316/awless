@@ -18,7 +18,7 @@ import (
 	"github.com/wallix/awless/cloud"
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 var (
@@ -82,7 +82,7 @@ func SendStats(db *database.DB, localInfra, localAccess *graph.Graph) error {
 	return nil
 }
 
-func BuildStats(db *database.DB, infra *graph.Graph, access *rdf.Graph, fromCommandId int) (*stats, int, error) {
+func BuildStats(db *database.DB, infra *graph.Graph, access *graph.Graph, fromCommandId int) (*stats, int, error) {
 	commandsStat, lastCommandId, err := buildCommandsStat(db, fromCommandId)
 	if err != nil {
 		return nil, 0, err
@@ -312,25 +312,25 @@ func buildAccessMetrics(region string, access *graph.Graph, time time.Time) (*ac
 		Date:   time,
 		Region: region,
 	}
-	c, min, max, err := computeCountMinMaxForTypeWithChildType(access, graph.Group, rdf.User)
+	c, min, max, err := computeCountMinMaxForTypeWithChildType(access, graph.Group, graph.User)
 	if err != nil {
 		return metrics, err
 	}
 	metrics.NbGroups, metrics.MinUsersByGroup, metrics.MaxUsersByGroup = c, min, max
 
-	c, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, rdf.User)
+	c, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, graph.User)
 	if err != nil {
 		return metrics, err
 	}
 	metrics.NbPolicies, metrics.MinUsersByLocalPolicies, metrics.MaxUsersByLocalPolicies = c, min, max
 
-	_, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, rdf.Role)
+	_, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, graph.Role)
 	if err != nil {
 		return metrics, err
 	}
 	metrics.MinRolesByLocalPolicies, metrics.MaxRolesByLocalPolicies = min, max
 
-	_, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, rdf.Group)
+	_, min, max, err = computeCountMinMaxForTypeWithChildType(access, graph.Policy, graph.Group)
 	if err != nil {
 		return metrics, err
 	}
@@ -351,7 +351,7 @@ func buildAccessMetrics(region string, access *graph.Graph, time time.Time) (*ac
 	return metrics, nil
 }
 
-func computeCountMinMaxChildForType(graph *graph.Graph, t rdf.ResourceType) (int, int, int, error) {
+func computeCountMinMaxChildForType(graph *graph.Graph, t graph.ResourceType) (int, int, int, error) {
 	nodes, err := graph.NodesForType(t)
 	if err != nil {
 		return 0, 0, 0, err
@@ -381,7 +381,7 @@ func computeCountMinMaxChildForType(graph *graph.Graph, t rdf.ResourceType) (int
 	return len(nodes), min, max, nil
 }
 
-func computeCountMinMaxForTypeWithChildType(graph *graph.Graph, parentType, childType rdf.ResourceType) (int, int, int, error) {
+func computeCountMinMaxForTypeWithChildType(graph *graph.Graph, parentType, childType graph.ResourceType) (int, int, int, error) {
 	nodes, err := graph.NodesForType(parentType)
 	if err != nil {
 		return 0, 0, 0, err

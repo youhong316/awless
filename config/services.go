@@ -1,10 +1,6 @@
 package config
 
-import (
-	"path/filepath"
-
-	"github.com/wallix/awless/rdf"
-)
+import "path/filepath"
 
 func LoadInfraGraph() (*graph.Graph, error) {
 	var err error

@@ -12,7 +12,7 @@ import (
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
 	"github.com/wallix/awless/display"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/revision"
 )
 
@@ -26,10 +26,10 @@ var (
 
 func init() {
 	//Resources
-	for _, resource := range []graph.ResourceType{rdf.Instance, rdf.Vpc, rdf.Subnet} {
+	for _, resource := range []graph.ResourceType{graph.Instance, graph.Vpc, graph.Subnet} {
 		showCmd.AddCommand(showInfraResourceCmd(resource))
 	}
-	for _, resource := range []graph.ResourceType{rdf.User, rdf.Role, rdf.Policy, rdf.Group} {
+	for _, resource := range []graph.ResourceType{graph.User, graph.Role, graph.Policy, graph.Group} {
 		showCmd.AddCommand(showAccessResourceCmd(resource))
 	}
 
@@ -107,7 +107,7 @@ var showAccessResourceCmd = func(resourceType graph.ResourceType) *cobra.Command
 	return command
 }
 
-func printResource(g *graph.Graph, resourceType rdf.ResourceType, id string) {
+func printResource(g *graph.Graph, resourceType graph.ResourceType, id string) {
 	a := alias.Alias(id)
 	if aID, ok := a.ResolveToId(g, resourceType); ok {
 		id = aID

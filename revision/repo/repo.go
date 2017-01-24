@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 
 	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"

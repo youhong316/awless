@@ -3,7 +3,8 @@ package revision
 import (
 	"time"
 
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
+
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )

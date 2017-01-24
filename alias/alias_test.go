@@ -3,7 +3,7 @@ package alias
 import (
 	"testing"
 
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 func TestResourceNameToId(t *testing.T) {

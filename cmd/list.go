@@ -8,7 +8,7 @@ import (
 	"github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/display"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/shell"
 )
 
@@ -24,10 +24,10 @@ var (
 
 func init() {
 	RootCmd.AddCommand(listCmd)
-	for _, resource := range []graph.ResourceType{rdf.Instance, rdf.Vpc, rdf.Subnet, rdf.SecurityGroup} {
+	for _, resource := range []graph.ResourceType{graph.Instance, graph.Vpc, graph.Subnet, graph.SecurityGroup} {
 		listCmd.AddCommand(listInfraResourceCmd(resource))
 	}
-	for _, resource := range []graph.ResourceType{rdf.User, rdf.Role, rdf.Policy, rdf.Group} {
+	for _, resource := range []graph.ResourceType{graph.User, graph.Role, graph.Policy, graph.Group} {
 		listCmd.AddCommand(listAccessResourceCmd(resource))
 	}
 	listCmd.AddCommand(listAllCmd)
@@ -115,7 +115,7 @@ var listAllCmd = &cobra.Command{
 	},
 }
 
-func printResources(g *graph.Graph, nodeType rdf.ResourceType) {
+func printResources(g *graph.Graph, nodeType graph.ResourceType) {
 	displayer := display.BuildOptions(
 		display.WithRdfType(nodeType),
 		display.WithHeaders(display.DefaultsColumnDefinitions[nodeType]),

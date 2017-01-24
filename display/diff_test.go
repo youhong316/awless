@@ -8,7 +8,6 @@ import (
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
 	"github.com/wallix/awless/cloud/aws"
-	"github.com/wallix/awless/rdf"
 )
 
 func TestDisplayCommit(t *testing.T) {

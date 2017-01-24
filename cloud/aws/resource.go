@@ -7,42 +7,42 @@ import (
 	awssdk "github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/wallix/awless/cloud"
+	"github.com/wallix/awless/graph"
 )
 
-func NewResource(source interface{}) (*cloud.Resource, error) {
+func NewResource(source interface{}) (*graph.Resource, error) {
 	value := reflect.ValueOf(source)
 	if !value.IsValid() || value.Kind() != reflect.Ptr || value.IsNil() {
 		return nil, fmt.Errorf("can not fetch cloud resource. %v is not a valid pointer.", value)
 	}
 	nodeV := value.Elem()
 
-	var res *cloud.Resource
+	var res *graph.Resource
 	switch ss := source.(type) {
 	case *ec2.Instance:
-		res = cloud.InitResource(awssdk.StringValue(ss.InstanceId), graph.Instance)
+		res = graph.InitResource(awssdk.StringValue(ss.InstanceId), graph.Instance)
 	case *ec2.Vpc:
-		res = cloud.InitResource(awssdk.StringValue(ss.VpcId), graph.Vpc)
+		res = graph.InitResource(awssdk.StringValue(ss.VpcId), graph.Vpc)
 	case *ec2.Subnet:
-		res = cloud.InitResource(awssdk.StringValue(ss.SubnetId), graph.Subnet)
+		res = graph.InitResource(awssdk.StringValue(ss.SubnetId), graph.Subnet)
 	case *ec2.SecurityGroup:
-		res = cloud.InitResource(awssdk.StringValue(ss.GroupId), graph.SecurityGroup)
+		res = graph.InitResource(awssdk.StringValue(ss.GroupId), graph.SecurityGroup)
 	case *iam.User:
-		res = cloud.InitResource(awssdk.StringValue(ss.UserId), graph.User)
+		res = graph.InitResource(awssdk.StringValue(ss.UserId), graph.User)
 	case *iam.UserDetail:
-		res = cloud.InitResource(awssdk.StringValue(ss.UserId), graph.User)
+		res = graph.InitResource(awssdk.StringValue(ss.UserId), graph.User)
 	case *iam.Role:
-		res = cloud.InitResource(awssdk.StringValue(ss.RoleId), graph.Role)
+		res = graph.InitResource(awssdk.StringValue(ss.RoleId), graph.Role)
 	case *iam.RoleDetail:
-		res = cloud.InitResource(awssdk.StringValue(ss.RoleId), graph.Role)
+		res = graph.InitResource(awssdk.StringValue(ss.RoleId), graph.Role)
 	case *iam.Group:
-		res = cloud.InitResource(awssdk.StringValue(ss.GroupId), graph.Group)
+		res = graph.InitResource(awssdk.StringValue(ss.GroupId), graph.Group)
 	case *iam.GroupDetail:
-		res = cloud.InitResource(awssdk.StringValue(ss.GroupId), graph.Group)
+		res = graph.InitResource(awssdk.StringValue(ss.GroupId), graph.Group)
 	case *iam.Policy:
-		res = cloud.InitResource(awssdk.StringValue(ss.PolicyId), graph.Policy)
+		res = graph.InitResource(awssdk.StringValue(ss.PolicyId), graph.Policy)
 	case *iam.ManagedPolicyDetail:
-		res = cloud.InitResource(awssdk.StringValue(ss.PolicyId), graph.Policy)
+		res = graph.InitResource(awssdk.StringValue(ss.PolicyId), graph.Policy)
 	default:
 		return nil, fmt.Errorf("Unknown type of resource %T", source)
 	}

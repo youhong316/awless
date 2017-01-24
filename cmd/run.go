@@ -14,7 +14,7 @@ import (
 	awscloud "github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/template"
 	"github.com/wallix/awless/template/ast"
 	"github.com/wallix/awless/template/driver/aws"

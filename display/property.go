@@ -8,7 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/wallix/awless/cloud"
 	"github.com/wallix/awless/cloud/aws"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 const truncateSize = 25

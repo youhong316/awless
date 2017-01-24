@@ -9,7 +9,6 @@ import (
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
 	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/rdf"
 )
 
 // FullDiff displays a table of a diff with both resources and properties diffs (inserted and deleted triples)

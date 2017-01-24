@@ -11,7 +11,7 @@ import (
 	"github.com/wallix/awless/alias"
 	"github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 	"github.com/wallix/awless/shell"
 )
 

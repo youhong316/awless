@@ -2,7 +2,7 @@ package display
 
 import (
 	"github.com/fatih/color"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 var DefaultsColumnDefinitions = map[graph.ResourceType][]ColumnDefinition{

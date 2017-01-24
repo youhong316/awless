@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph"
 )
 
 // SeveralResourcesOfGraph prints a RDF graph with different type of resources according to there display properties

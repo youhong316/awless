@@ -1,31 +1,31 @@
-package cloud
+package graph
 
 import (
 	"github.com/google/badwolf/triple"
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
-	"github.com/wallix/awless/rdf"
+	"github.com/wallix/awless/graph/internal/rdf"
 )
 
 type Resource struct {
-	kind       graph.ResourceType
+	kind       ResourceType
 	id         string
 	properties Properties
 }
 
-func InitResource(id string, kind graph.ResourceType) *Resource {
+func InitResource(id string, kind ResourceType) *Resource {
 	return &Resource{id: id, kind: kind, properties: make(Properties)}
 }
 
 func InitFromRdfNode(n *node.Node) *Resource {
-	return InitResource(n.ID().String(), graph.NewResourceType(n.Type()))
+	return InitResource(n.ID().String(), NewResourceType(n.Type()))
 }
 
 func (res *Resource) Properties() Properties {
 	return res.properties
 }
 
-func (res *Resource) Type() graph.ResourceType {
+func (res *Resource) Type() ResourceType {
 	return res.kind
 }
 
@@ -33,13 +33,13 @@ func (res *Resource) Id() string {
 	return res.id
 }
 
-func (res *Resource) ExistsInGraph(g *graph.Graph) bool {
+func (res *Resource) ExistsInGraph(g *Graph) bool {
 	r, err := res.BuildRdfSubject()
 	if err != nil {
 		return false
 	}
 
-	nodes, err := g.NodesForType(res.kind)
+	nodes, err := g.NodesForType(res.kind.ToRDFString())
 	if err != nil {
 		return false
 	}
@@ -55,13 +55,13 @@ func (res *Resource) BuildRdfSubject() (*node.Node, error) {
 	return node.NewNodeFromStrings(res.kind.ToRDFString(), res.id)
 }
 
-func (res *Resource) UnmarshalFromGraph(g *graph.Graph) error {
+func (res *Resource) UnmarshalFromGraph(g *Graph) error {
 	node, err := res.BuildRdfSubject()
 	if err != nil {
 		return err
 	}
 
-	triples, err := g.TriplesForSubjectPredicate(node, graph.PropertyPredicate)
+	triples, err := g.TriplesForSubjectPredicate(node, rdf.PropertyPredicate)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (res *Resource) MarshalToTriples() ([]*triple.Triple, error) {
 	if lit, err = literal.DefaultBuilder().Build(literal.Text, res.kind.ToRDFString()); err != nil {
 		return triples, err
 	}
-	t, err := triple.New(n, graph.HasTypePredicate, triple.NewLiteralObject(lit))
+	t, err := triple.New(n, rdf.HasTypePredicate, triple.NewLiteralObject(lit))
 	if err != nil {
 		return triples, err
 	}
@@ -105,9 +105,9 @@ func (res *Resource) MarshalToTriples() ([]*triple.Triple, error) {
 	return triples, nil
 }
 
-func LoadResourcesFromGraph(g *graph.Graph, t rdf.ResourceType) ([]*Resource, error) {
+func LoadResourcesFromGraph(g *Graph, t ResourceType) ([]*Resource, error) {
 	var res []*Resource
-	nodes, err := g.NodesForType(t)
+	nodes, err := g.NodesForType(t.ToRDFString())
 	if err != nil {
 		return res, err
 	}

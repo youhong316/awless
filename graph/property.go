@@ -1,4 +1,4 @@
-package cloud
+package graph
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 	"github.com/google/badwolf/triple"
 	"github.com/google/badwolf/triple/literal"
 	"github.com/google/badwolf/triple/node"
+	"github.com/wallix/awless/graph/internal/rdf"
 )
 
 type Properties map[string]interface{}
@@ -23,7 +24,7 @@ func (prop *Property) tripleFromNode(subject *node.Node) (*triple.Triple, error)
 	if err != nil {
 		return nil, err
 	}
-	if propT, err := triple.New(subject, graph.PropertyPredicate, propL); err != nil {
+	if propT, err := triple.New(subject, rdf.PropertyPredicate, propL); err != nil {
 		return nil, err
 	} else {
 		return propT, nil
@@ -43,7 +44,7 @@ func (prop *Property) ToLiteralObject() (*triple.Object, error) {
 }
 
 func NewPropertyFromTriple(t *triple.Triple) (*Property, error) {
-	if t.Predicate().String() != graph.PropertyPredicate.String() {
+	if t.Predicate().String() != rdf.PropertyPredicate.String() {
 		return nil, fmt.Errorf("This triple has not a property prediate: %s", t.Predicate().String())
 	}
 	oL, err := t.Object().Literal()
