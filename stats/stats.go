@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wallix/awless/cloud"
 	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/database"
 	"github.com/wallix/awless/graph"
@@ -233,13 +232,13 @@ func buildInstancesStats(infra *graph.Graph) (instancesStats []*instancesStat, e
 }
 
 func addStatsForInstanceStringProperty(infra *graph.Graph, propertyName string, instanceStatType string, instancesStats []*instancesStat) ([]*instancesStat, error) {
-	nodes, err := infra.NodesForType(graph.Instance)
+	nodes, err := infra.NodesForType(graph.Instance.ToRDFString())
 	if err != nil {
 		return nil, err
 	}
 	propertyValuesCountMap := make(map[string]int)
 	for _, i := range nodes {
-		inst := cloud.InitFromRdfNode(i)
+		inst := graph.InitFromRdfNode(i)
 		e := inst.UnmarshalFromGraph(infra)
 		if e != nil {
 			return nil, e
@@ -352,7 +351,7 @@ func buildAccessMetrics(region string, access *graph.Graph, time time.Time) (*ac
 }
 
 func computeCountMinMaxChildForType(graph *graph.Graph, t graph.ResourceType) (int, int, int, error) {
-	nodes, err := graph.NodesForType(t)
+	nodes, err := graph.NodesForType(t.ToRDFString())
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -360,14 +359,14 @@ func computeCountMinMaxChildForType(graph *graph.Graph, t graph.ResourceType) (i
 		return 0, 0, 0, nil
 	}
 	firstNode := nodes[0]
-	count, err := graph.CountTriplesForSubjectAndPredicate(firstNode, graph.ParentOfPredicate)
+	count, err := graph.CountChildrenForNode(firstNode)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 
 	min, max := count, count
 	for _, node := range nodes[1:] {
-		count, err = graph.CountTriplesForSubjectAndPredicate(node, graph.ParentOfPredicate)
+		count, err = graph.CountChildrenForNode(node)
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -382,7 +381,7 @@ func computeCountMinMaxChildForType(graph *graph.Graph, t graph.ResourceType) (i
 }
 
 func computeCountMinMaxForTypeWithChildType(graph *graph.Graph, parentType, childType graph.ResourceType) (int, int, int, error) {
-	nodes, err := graph.NodesForType(parentType)
+	nodes, err := graph.NodesForType(parentType.ToRDFString())
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -390,14 +389,14 @@ func computeCountMinMaxForTypeWithChildType(graph *graph.Graph, parentType, chil
 		return 0, 0, 0, nil
 	}
 	firstNode := nodes[0]
-	count, err := graph.CountTriplesForSubjectAndPredicateObjectOfType(firstNode, graph.ParentOfPredicate, childType)
+	count, err := graph.CountChildrenOfTypeForNode(firstNode, childType)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 
 	min, max := count, count
 	for _, node := range nodes[1:] {
-		count, err = graph.CountTriplesForSubjectAndPredicateObjectOfType(node, graph.ParentOfPredicate, childType)
+		count, err = graph.CountChildrenOfTypeForNode(node, childType)
 		if err != nil {
 			return 0, 0, 0, err
 		}

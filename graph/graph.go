@@ -26,3 +26,11 @@ func NewParentOfTriple(subject, obj *node.Node) (*triple.Triple, error) {
 func NewRegionTypeTriple(subject *node.Node) (*triple.Triple, error) {
 	return triple.New(subject, rdf.HasTypePredicate, triple.NewLiteralObject(rdf.RegionLiteral))
 }
+
+func (g *Graph) CountChildrenOfTypeForNode(node *node.Node, childType ResourceType) (int, error) {
+	return g.CountTriplesForSubjectAndPredicateObjectOfType(node, rdf.ParentOfPredicate, childType.ToRDFString())
+}
+
+func (g *Graph) CountChildrenForNode(node *node.Node) (int, error) {
+	return g.CountTriplesForSubjectAndPredicate(node, rdf.ParentOfPredicate)
+}
