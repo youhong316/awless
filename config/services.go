@@ -1,6 +1,10 @@
 package config
 
-import "path/filepath"
+import (
+	"path/filepath"
+
+	"github.com/wallix/awless/graph"
+)
 
 func LoadInfraGraph() (*graph.Graph, error) {
 	var err error
