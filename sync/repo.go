@@ -47,7 +47,7 @@ type GitRepo struct {
 	path  string
 }
 
-func NewRepo() (Repo, error) {
+func newRepo() (Repo, error) {
 	if IsGitInstalled() {
 		return newGitRepo(config.RepoDir)
 	} else {

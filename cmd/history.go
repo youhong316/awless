@@ -42,16 +42,13 @@ var historyCmd = &cobra.Command{
 
 		var diffs []*sync.Diff
 
-		rep, err := sync.NewRepo()
-		exitOn(err)
-
-		all, err := rep.List()
+		all, err := sync.DefaultSyncer.List()
 
 		for i := 1; i < len(all); i++ {
-			from, err := rep.LoadRev(all[i-1].Id)
+			from, err := sync.DefaultSyncer.LoadRev(all[i-1].Id)
 			exitOn(err)
 
-			to, err := rep.LoadRev(all[i].Id)
+			to, err := sync.DefaultSyncer.LoadRev(all[i].Id)
 			exitOn(err)
 
 			d, err := sync.BuildDiff(from, to, root)
