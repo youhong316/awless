@@ -17,50 +17,38 @@ limitations under the License.
 package inspectors
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
 
-	"github.com/wallix/awless/graph"
+	"github.com/wallix/awless/cloud"
 )
 
 type BucketSizer struct {
-	total   float64
+	total   int
 	buckets map[string]*bucket
 }
 
 type bucket struct {
-	objects int
-	size    float64
+	objects, size int
 }
 
 func (*BucketSizer) Name() string {
 	return "bucket_sizer"
 }
 
-func (p *BucketSizer) Services() []string {
-	return []string{"storage"}
-}
-
-func (i *BucketSizer) Inspect(graphs ...*graph.Graph) error {
-	if len(graphs) < 0 {
-		return errors.New("no graph provided for")
-	}
-
-	g := graphs[0]
-
+func (i *BucketSizer) Inspect(g cloud.GraphAPI) error {
 	i.buckets = make(map[string]*bucket)
 
-	objects, err := g.GetAllResources(graph.Object)
+	objects, err := g.Find(cloud.NewQuery(cloud.S3Object))
 	if err != nil {
 		return err
 	}
 
 	for _, obj := range objects {
-		size := obj.Properties["Size"].(float64)
+		size := obj.Properties()["Size"].(int)
 		i.total = i.total + size
-		name := obj.Properties["BucketName"].(string)
+		name := obj.Properties()["Bucket"].(string)
 		b := i.buckets[name]
 		if b == nil {
 			b = new(bucket)
@@ -80,10 +68,10 @@ func (i *BucketSizer) Print(w io.Writer) {
 	fmt.Fprintln(tabw, "--------\t----------\t-----------------\t")
 
 	for name, bucket := range i.buckets {
-		fmt.Fprintf(tabw, "%s\t%d\t%.5f Gb\t\n", name, bucket.objects, bucket.size/1e9)
+		fmt.Fprintf(tabw, "%s\t%d\t%0.6f Gb\t\n", name, bucket.objects, float64(bucket.size)/1e9)
 	}
 
-	fmt.Fprintf(tabw, "%s\t%s\t%.4f Gb\t\n", "", "", i.total/1e9)
+	fmt.Fprintf(tabw, "%s\t%s\t%0.6f Gb\t\n", "", "", float64(i.total)/1e9)
 
 	tabw.Flush()
 }

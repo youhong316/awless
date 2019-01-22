@@ -15,6 +15,17 @@ const (
 	symrefPrefix    = "ref: "
 )
 
+// refRevParseRules are a set of rules to parse references into short names.
+// These are the same rules as used by git in shorten_unambiguous_ref.
+// See: https://github.com/git/git/blob/e0aaa1b6532cfce93d87af9bc813fb2e7a7ce9d7/refs.c#L417
+var refRevParseRules = []string{
+	"refs/%s",
+	"refs/tags/%s",
+	"refs/heads/%s",
+	"refs/remotes/%s",
+	"refs/remotes/%s/HEAD",
+}
+
 var (
 	ErrReferenceNotFound = errors.New("reference not found")
 )
@@ -28,6 +39,19 @@ const (
 	SymbolicReference ReferenceType = 2
 )
 
+func (r ReferenceType) String() string {
+	switch r {
+	case InvalidReference:
+		return "invalid-reference"
+	case HashReference:
+		return "hash-reference"
+	case SymbolicReference:
+		return "symbolic-reference"
+	}
+
+	return ""
+}
+
 // ReferenceName reference name's
 type ReferenceName string
 
@@ -37,12 +61,21 @@ func (r ReferenceName) String() string {
 
 // Short returns the short name of a ReferenceName
 func (r ReferenceName) Short() string {
-	parts := strings.Split(string(r), "/")
-	return parts[len(parts)-1]
+	s := string(r)
+	res := s
+	for _, format := range refRevParseRules {
+		_, err := fmt.Sscanf(s, format, &res)
+		if err == nil {
+			continue
+		}
+	}
+
+	return res
 }
 
 const (
-	HEAD ReferenceName = "HEAD"
+	HEAD   ReferenceName = "HEAD"
+	Master ReferenceName = "refs/heads/master"
 )
 
 // Reference is a representation of git reference

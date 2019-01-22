@@ -19,6 +19,8 @@ package commands
 import (
 	"fmt"
 
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless/config"
 )
@@ -35,5 +37,6 @@ var versionCmd = &cobra.Command{
 }
 
 func printVersion(*cobra.Command, []string) {
-	fmt.Println("awless", config.CurrentBuildInfo.String())
+	fmt.Fprint(os.Stderr, config.AWLESS_ASCII_LOGO)
+	fmt.Println(config.CurrentBuildInfo)
 }

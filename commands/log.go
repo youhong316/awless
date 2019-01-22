@@ -17,71 +17,127 @@ limitations under the License.
 package commands
 
 import (
-	"bytes"
 	"fmt"
-	"strings"
-	"time"
+	"os"
 
-	"github.com/oklog/ulid"
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless/database"
+	"github.com/wallix/awless/logger"
+)
+
+var (
+	deleteAllLogsFlag             bool
+	deleteFromIdLogsFlag          string
+	limitLogCountFlag             int
+	rawJSONLogFlag, idOnlyLogFlag bool
+	fullLogFlag, shortLogFlag     bool
 )
 
 func init() {
 	RootCmd.AddCommand(logCmd)
+
+	logCmd.Flags().BoolVar(&deleteAllLogsFlag, "delete-all", false, "Delete all logs from local db")
+	logCmd.Flags().StringVar(&deleteFromIdLogsFlag, "delete", "", "Delete a specifc log entry given its id")
+	logCmd.Flags().IntVarP(&limitLogCountFlag, "number", "n", 0, "Limit log output to the last n logs")
+	logCmd.Flags().BoolVar(&rawJSONLogFlag, "raw", false, "Display logs as raw json with template context info, usually for debug")
+	logCmd.Flags().BoolVar(&shortLogFlag, "short", false, "Display one or more template log with less info")
+	logCmd.Flags().BoolVar(&fullLogFlag, "full", false, "Display template logs with full info")
+	logCmd.Flags().BoolVar(&idOnlyLogFlag, "id-only", false, "Show only log template IDs (i.e. revert IDs)")
 }
 
 var logCmd = &cobra.Command{
-	Use:                "log",
-	Short:              "Logs all your awless template executions",
-	PersistentPreRun:   applyHooks(initAwlessEnvHook),
-	PersistentPostRunE: saveHistoryHook,
+	Use:               "log [REVERTID]",
+	Short:             "Show all awless template actions against your cloud infrastructure",
+	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, firstInstallDoneHook),
+	PersistentPostRun: applyHooks(verifyNewVersionHook, onVersionUpgrade),
 
 	RunE: func(c *cobra.Command, args []string) error {
-		db, err, dbclose := database.Current()
-		exitOn(err)
-		all, err := db.ListTemplateExecutions()
-		dbclose()
-		exitOn(err)
+		var all []*database.LoadedTemplate
 
-		for _, templ := range all {
-			var buff bytes.Buffer
+		printer := getPrinter(args)
 
-			for _, done := range templ.Executed {
-				line := fmt.Sprintf("\t%s", done.Line)
-				if done.Err != "" {
-					buff.WriteString(renderRedFn(line))
-					buff.WriteByte('\n')
-					buff.WriteString(formatMultiLineErrMsg(done.Err))
-				} else {
-					buff.WriteString(renderGreenFn(line))
+		if len(args) > 0 {
+			exitOn(database.Execute(func(db *database.DB) error {
+				single, err := db.GetLoadedTemplate(args[0])
+				if err != nil {
+					return err
 				}
-				buff.WriteByte('\n')
-			}
-
-			uid, err := ulid.Parse(templ.ID)
-			exitOn(err)
-
-			date := time.Unix(int64(uid.Time())/int64(1000), time.Nanosecond.Nanoseconds())
-
-			fmt.Printf("Date: %s\n", date.Format(time.Stamp))
-			if templ.IsRevertible() {
-				fmt.Printf("Revert id: %s\n", templ.ID)
-			} else {
-				fmt.Println("Revert id: <not revertible>")
-			}
-			fmt.Println(buff.String())
+				all = append(all, single)
+				return nil
+			}))
+			print(all, printer)
+			return nil
 		}
 
+		if deleteAllLogsFlag {
+			exitOn(database.Execute(func(db *database.DB) error {
+				return db.DeleteTemplates()
+			}))
+			return nil
+		}
+
+		if tid := deleteFromIdLogsFlag; tid != "" {
+			exitOn(database.Execute(func(db *database.DB) error {
+				return db.DeleteTemplate(tid)
+			}))
+			return nil
+		}
+
+		exitOn(database.Execute(func(db *database.DB) (dberr error) {
+			all, dberr = db.ListTemplates()
+			return
+		}))
+
+		print(all, printer)
 		return nil
 	},
 }
 
-func formatMultiLineErrMsg(msg string) string {
-	notabs := strings.Replace(msg, "\t", "", -1)
-	var indented []string
-	for _, line := range strings.Split(notabs, "\n") {
-		indented = append(indented, fmt.Sprintf("\t\t%s", line))
+func print(all []*database.LoadedTemplate, printer logPrinter) {
+	if limitLogCountFlag > 0 && limitLogCountFlag < len(all) {
+		all = all[len(all)-limitLogCountFlag:]
 	}
-	return strings.Join(indented, "\n")
+
+	for i, loaded := range all {
+		if loaded.Err != nil {
+			logger.Errorf("Template '%s' in error: %s", string(loaded.Key), loaded.Err)
+			logger.Verbosef("Template raw content\n%s", loaded.Raw)
+			fmt.Println()
+			continue
+		}
+
+		if err := printer.print(loaded.TplExec); err != nil {
+			logger.Error(err.Error())
+		}
+
+		if i < len(all)-1 {
+			fmt.Println()
+		}
+	}
+
+	if shortLogFlag {
+		fmt.Println()
+	}
+}
+
+func getPrinter(args []string) logPrinter {
+	var defaultPrinter logPrinter
+	if len(args) > 0 {
+		defaultPrinter = &fullLogPrinter{os.Stdout}
+	} else {
+		defaultPrinter = &statLogPrinter{os.Stdout}
+	}
+
+	switch {
+	case rawJSONLogFlag:
+		return &rawJSONPrinter{os.Stdout}
+	case idOnlyLogFlag:
+		return &idOnlyPrinter{os.Stdout}
+	case shortLogFlag:
+		return &shortLogPrinter{os.Stdout}
+	case fullLogFlag:
+		return &fullLogPrinter{os.Stdout}
+	default:
+		return defaultPrinter
+	}
 }

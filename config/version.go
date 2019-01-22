@@ -21,13 +21,24 @@ import (
 	"fmt"
 )
 
+const AWLESS_ASCII_LOGO = `
+ █████╗  ██╗    ██╗ ██╗     ██████  ██████╗ ██████╗     
+██╔══██╗ ██║    ██║ ██║     ██╔══╝  ██╔═══╝ ██╔═══╝    
+███████║ ██║ █╗ ██║ ██║     ████╗   ██████  ██████   
+██╔══██║ ██║███╗██║ ██║     ██╔═╝       ██╗     ██╗   
+██║  ██║ ╚███╔███╔╝ ██████╗ ██████╗ ██████║ ██████║   
+╚═╝  ╚═╝  ╚══╝╚══╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚═════╝
+`
+
 var (
-	Version                                 = "0.0.9"
+	Version  = "v0.1.11"
+	BuildFor string
+
 	buildSha, buildDate, buildArch, buildOS string
 )
 
 type BuildInfo struct {
-	Version, Sha, Date, Arch, OS string
+	Version, Sha, Date, Arch, OS, For string
 }
 
 func (b BuildInfo) String() string {
@@ -46,11 +57,15 @@ func (b BuildInfo) String() string {
 	if b.OS != "" {
 		buff.WriteString(fmt.Sprintf(", build-os=%s", b.OS))
 	}
+	if b.For != "" {
+		buff.WriteString(fmt.Sprintf(", build-for=%s", b.For))
+	}
 	return buff.String()
 }
 
 var CurrentBuildInfo = BuildInfo{
 	Version: Version,
+	For:     BuildFor,
 	Sha:     buildSha,
 	Date:    buildDate,
 	Arch:    buildArch,

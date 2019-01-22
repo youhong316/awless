@@ -22,290 +22,238 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/oklog/ulid"
-	"github.com/wallix/awless/template/ast"
-	"github.com/wallix/awless/template/driver"
+	"github.com/wallix/awless/template/env"
+	"github.com/wallix/awless/template/internal/ast"
 )
 
 type Template struct {
+	ID string
 	*ast.AST
 }
 
-func (s *Template) Run(d driver.Driver) (*Template, error) {
+func (s *Template) DryRun(renv env.Running) (tpl *Template, err error) {
+	renv.SetDryRun(true)
+	defer renv.SetDryRun(false)
+
+	tpl, err = s.Run(renv)
+	if err != nil {
+		return
+	}
+
+	errs := &Errors{}
+	for _, cmd := range tpl.CommandNodesIterator() {
+		if cmderr := cmd.Err(); cmderr != nil {
+			errs.add(cmderr)
+		}
+	}
+
+	if _, any := errs.Errors(); any {
+		err = errs
+	}
+
+	return
+}
+
+func (s *Template) Run(renv env.Running) (*Template, error) {
 	vars := map[string]interface{}{}
 
-	current := &Template{AST: s.Clone()}
+	current := &Template{AST: &ast.AST{}}
+	current.ID = ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 
-	for _, sts := range current.Statements {
-		switch sts.Node.(type) {
-		case *ast.ExpressionNode:
-			expr := sts.Node.(*ast.ExpressionNode)
-			fn := d.Lookup(expr.Action, expr.Entity)
-			expr.ProcessRefs(vars)
-
-			sts.Line = expr.String()
-			if sts.Result, sts.Err = fn(expr.Params); sts.Err != nil {
-				return current, sts.Err
+	for _, sts := range s.Statements {
+		clone := sts.Clone()
+		current.Statements = append(current.Statements, clone)
+		switch n := clone.Node.(type) {
+		case *ast.CommandNode:
+			n.ProcessRefs(vars)
+			if stop := processCmdNode(renv, n); stop {
+				return current, nil
 			}
 		case *ast.DeclarationNode:
-			ident := sts.Node.(*ast.DeclarationNode).Left
-			expr := sts.Node.(*ast.DeclarationNode).Right
-			fn := d.Lookup(expr.Action, expr.Entity)
-			expr.ProcessRefs(vars)
-
-			sts.Result, sts.Err = fn(expr.Params)
-			ident.Val = sts.Result
-			sts.Line = expr.String()
-			if sts.Err != nil {
-				return current, sts.Err
+			ident := n.Ident
+			expr := n.Expr
+			switch n := expr.(type) {
+			case *ast.CommandNode:
+				n.ProcessRefs(vars)
+				if stop := processCmdNode(renv, n); stop {
+					return current, nil
+				}
+				vars[ident] = n.Result()
+			default:
+				return current, fmt.Errorf("unknown type of node: %T", expr)
 			}
-			vars[ident.Ident] = ident.Val
+		default:
+			return current, fmt.Errorf("unknown type of node: %T", clone.Node)
 		}
 	}
 
 	return current, nil
 }
 
-func (s *Template) Compile(d driver.Driver) (*Template, error) {
-	defer d.SetDryRun(false)
-	d.SetDryRun(true)
-
-	return s.Run(d)
+func processCmdNode(renv env.Running, n *ast.CommandNode) bool {
+	if renv.IsDryRun() {
+		n.CmdResult, n.CmdErr = n.Command.Run(renv, n.ToDriverParams())
+		n.CmdErr = prefixError(n.CmdErr, fmt.Sprintf("dry run: %s %s", n.Action, n.Entity))
+	} else {
+		n.CmdResult, n.CmdErr = n.Run(renv, n.ToDriverParams())
+		var res, status string
+		if n.CmdResult != nil {
+			res = " (" + color.New(color.FgCyan).Sprint(n.CmdResult) + ") "
+		}
+		if n.CmdErr != nil {
+			status = color.New(color.FgRed).Sprint("KO")
+		} else {
+			status = color.New(color.FgGreen).Sprint("OK")
+		}
+		renv.Log().Infof("%s %s %s%s", status, n.Action, n.Entity, res)
+		if n.CmdErr != nil {
+			renv.Log().MultiLineError(n.CmdErr)
+		}
+	}
+	return n.CmdErr != nil
 }
 
-func (s *Template) GetEntitiesSet() (entities []string) {
-	unique := make(map[string]bool)
-	s.visitExpressionNodes(func(n *ast.ExpressionNode) {
-		unique[n.Entity] = true
-	})
-
-	for entity, _ := range unique {
-		entities = append(entities, entity)
+func prefixError(err error, prefix string) error {
+	if err == nil {
+		return err
 	}
+	return fmt.Errorf("%s: %s", prefix, err.Error())
+}
+
+func (s *Template) Validate(rules ...Validator) (all []error) {
+	for _, rule := range rules {
+		errs := rule.Execute(s)
+		all = append(all, errs...)
+	}
+
 	return
 }
 
-func (s *Template) GetActionsSet() (actions []string) {
-	unique := make(map[string]bool)
-	s.visitExpressionNodes(func(n *ast.ExpressionNode) {
-		unique[n.Action] = true
-	})
-
-	for action, _ := range unique {
-		actions = append(actions, action)
+func (t *Template) HasErrors() bool {
+	for _, cmd := range t.CommandNodesIterator() {
+		if cmd.CmdErr != nil {
+			return true
+		}
 	}
+	return false
+}
+
+func (t *Template) UniqueDefinitions(apis map[string]string) (res []string) {
+	unique := make(map[string]struct{})
+	for _, cmd := range t.CommandNodesIterator() {
+		key := fmt.Sprintf("%s%s", cmd.Action, cmd.Entity)
+		if api, found := apis[key]; found {
+			unique[api] = struct{}{}
+		}
+	}
+
+	for api := range unique {
+		res = append(res, api)
+	}
+
 	return
 }
 
-func (s *Template) GetHoles() map[string]interface{} {
-	holes := make(map[string]interface{})
-	each := func(expr *ast.ExpressionNode) {
-		for k, v := range expr.Holes {
-			holes[k] = v
-		}
+func (s *Template) visitCommandNodes(fn func(n *ast.CommandNode)) {
+	for _, cmd := range s.CommandNodesIterator() {
+		fn(cmd)
 	}
-	s.visitExpressionNodes(each)
-	return holes
 }
 
-func (s *Template) GetAliases() map[string]string {
-	aliases := make(map[string]string)
-	each := func(expr *ast.ExpressionNode) {
-		for k, v := range expr.Aliases {
-			aliases[k] = v
+func (s *Template) visitCommandNodesE(fn func(n *ast.CommandNode) error) error {
+	for _, cmd := range s.CommandNodesIterator() {
+		if err := fn(cmd); err != nil {
+			return err
 		}
 	}
-	s.visitExpressionNodes(each)
-	return aliases
-}
-
-func (s *Template) MergeParams(newParams map[string]interface{}) {
-	each := func(expr *ast.ExpressionNode) {
-		for k, v := range newParams {
-			if strings.SplitN(k, ".", 2)[0] == expr.Entity {
-				if expr.Params == nil {
-					expr.Params = make(map[string]interface{})
-				}
-				expr.Params[strings.SplitN(k, ".", 2)[1]] = v
-			}
-		}
-	}
-	s.visitExpressionNodes(each)
-}
-
-func (s *Template) ResolveTemplate(refs map[string]interface{}) (map[string]interface{}, error) {
-	resolved := make(map[string]interface{})
-	each := func(expr *ast.ExpressionNode) {
-		processed := expr.ProcessHoles(refs)
-		for key, v := range processed {
-			resolved[expr.Entity+"."+key] = v
-		}
-	}
-
-	s.visitExpressionNodes(each)
-
-	return resolved, nil
-}
-
-func (s *Template) InteractiveResolveTemplate(each func(question string) interface{}) error {
-	fn := func(expr *ast.ExpressionNode) {
-		for key, hole := range expr.Holes {
-			if expr.Params == nil {
-				expr.Params = make(map[string]interface{})
-			}
-			res := each(hole)
-			expr.Params[key] = res
-			delete(expr.Holes, key)
-		}
-	}
-
-	s.visitExpressionNodes(fn)
 
 	return nil
 }
 
-func (s *Template) visitExpressionNodes(fn func(n *ast.ExpressionNode)) {
+func (s *Template) CommandNodesIterator() (nodes []*ast.CommandNode) {
 	for _, sts := range s.Statements {
-		var expr *ast.ExpressionNode
-
-		switch sts.Node.(type) {
-		case *ast.ExpressionNode:
-			expr = sts.Node.(*ast.ExpressionNode)
+		switch nn := sts.Node.(type) {
+		case *ast.CommandNode:
+			nodes = append(nodes, nn)
 		case *ast.DeclarationNode:
-			expr = sts.Node.(*ast.DeclarationNode).Right
-		}
-
-		if expr != nil {
-			fn(expr)
-		}
-	}
-}
-
-type TemplateExecution struct {
-	ID       string
-	Executed []*ExecutedStatement
-}
-
-type ExecutedStatement struct {
-	Line, Err, Result string
-}
-
-func (ex *ExecutedStatement) IsRevertible() bool {
-	if ex.Err != "" {
-		return false
-	}
-	if ex.Result != "" {
-		if strings.Contains(ex.Line, "create") || strings.Contains(ex.Line, "start") || strings.Contains(ex.Line, "stop") {
-			return true
-		}
-	} else {
-		return strings.Contains(ex.Line, "attach") || strings.Contains(ex.Line, "detach")
-	}
-
-	return false
-}
-
-func NewTemplateExecution(tpl *Template) *TemplateExecution {
-	out := &TemplateExecution{
-		ID: ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String(),
-	}
-
-	for _, sts := range tpl.Statements {
-		var errMsg string
-		if sts.Err != nil {
-			errMsg = sts.Err.Error()
-		}
-		var result string
-		switch sts.Result.(type) {
-		case string:
-			result = sts.Result.(string)
-		}
-		out.Executed = append(out.Executed,
-			&ExecutedStatement{Line: sts.Line, Result: result, Err: errMsg},
-		)
-	}
-
-	return out
-}
-
-func (te *TemplateExecution) HasErrors() (inError bool) {
-	for _, ex := range te.Executed {
-		if ex.Err != "" {
-			inError = true
+			expr := sts.Node.(*ast.DeclarationNode).Expr
+			switch expr.(type) {
+			case *ast.CommandNode:
+				nodes = append(nodes, expr.(*ast.CommandNode))
+			}
 		}
 	}
 	return
 }
 
-func (te *TemplateExecution) IsRevertible() bool {
-	for _, ex := range te.Executed {
-		if ex.IsRevertible() {
-			return true
+func (s *Template) CommandNodesReverseIterator() (nodes []*ast.CommandNode) {
+	for i := len(s.Statements) - 1; i >= 0; i-- {
+		sts := s.Statements[i]
+		switch sts.Node.(type) {
+		case *ast.CommandNode:
+			nodes = append(nodes, sts.Node.(*ast.CommandNode))
+		case *ast.DeclarationNode:
+			expr := sts.Node.(*ast.DeclarationNode).Expr
+			switch expr.(type) {
+			case *ast.CommandNode:
+				nodes = append(nodes, expr.(*ast.CommandNode))
+			}
 		}
 	}
-	return false
-}
-
-func (te *TemplateExecution) lines() (lines []string) {
-	for _, ex := range te.Executed {
-		lines = append(lines, ex.Line)
-	}
-
 	return
 }
 
-func (te *TemplateExecution) Revert() (*Template, error) {
-	var lines []string
-
-	for i := len(te.Executed) - 1; i >= 0; i-- {
-		if exec := te.Executed[i]; exec.IsRevertible() {
-			n, err := ParseStatement(exec.Line)
-			if err != nil {
-				return nil, err
-			}
-
-			switch n.(type) {
-			case *ast.ExpressionNode:
-				node := n.(*ast.ExpressionNode)
-				var revertAction string
-				var params []string
-				switch node.Action {
-				case "create":
-					revertAction = "delete"
-				case "start":
-					revertAction = "stop"
-				case "stop":
-					revertAction = "start"
-				case "detach":
-					revertAction = "attach"
-				case "attach":
-					revertAction = "detach"
-				}
-
-				switch node.Action {
-				case "start", "stop", "attach", "detach":
-					for k, v := range node.Params {
-						params = append(params, fmt.Sprintf("%s=%s", k, v))
-					}
-				case "create":
-					params = append(params, fmt.Sprintf("id=%s", exec.Result))
-				}
-
-				lines = append(lines, fmt.Sprintf("%s %s %s\n", revertAction, node.Entity, strings.Join(params, " ")))
-			default:
-				return nil, fmt.Errorf("cannot parse [%s] as expression node", exec.Line)
-			}
+func (s *Template) declarationNodesIterator() (nodes []*ast.DeclarationNode) {
+	for _, sts := range s.Statements {
+		switch n := sts.Node.(type) {
+		case *ast.DeclarationNode:
+			nodes = append(nodes, n)
 		}
 	}
+	return
+}
 
-	if len(lines) == 0 {
-		return nil, fmt.Errorf("revert: found nothing to revert from:\n%s\n(note: no revert provided for statement in error)", strings.Join(te.lines(), "\n"))
+func (s *Template) expressionNodesIterator() (nodes []ast.ExpressionNode) {
+	for _, st := range s.Statements {
+		if expr := extractExpressionNode(st); expr != nil {
+			nodes = append(nodes, expr)
+		}
 	}
+	return
+}
 
-	tpl, err := Parse(strings.Join(lines, "\n"))
-	if err != nil {
-		return nil, fmt.Errorf("revert: \n%s\n%s", strings.Join(lines, "\n"), err)
+func extractExpressionNode(st *ast.Statement) ast.ExpressionNode {
+	switch n := st.Node.(type) {
+	case *ast.DeclarationNode:
+		return n.Expr
+	case ast.ExpressionNode:
+		return n
 	}
+	return nil
+}
 
-	return tpl, nil
+type Errors struct {
+	errs []error
+}
+
+func (d *Errors) Errors() ([]error, bool) {
+	return d.errs, len(d.errs) > 0
+}
+
+func (d *Errors) add(err error) {
+	d.errs = append(d.errs, err)
+}
+
+func (d *Errors) Error() string {
+	var all []string
+	for _, err := range d.errs {
+		all = append(all, err.Error())
+	}
+	return strings.Join(all, "\n")
+}
+
+func MatchStringParamValue(s string) bool {
+	return ast.SimpleStringValue.MatchString(s)
 }

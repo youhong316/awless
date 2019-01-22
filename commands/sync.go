@@ -17,46 +17,43 @@ limitations under the License.
 package commands
 
 import (
-	"errors"
 	"fmt"
+	"log"
 	"os"
+	"runtime"
+	"runtime/pprof"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/wallix/awless/aws/services"
 	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/aws"
 	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/console"
-	"github.com/wallix/awless/database"
-	"github.com/wallix/awless/graph"
+	"github.com/wallix/awless/logger"
 	"github.com/wallix/awless/sync"
 )
 
 var (
-	dryRunSyncFlag        bool
-	diffFlag              bool
-	syncShowPropetiesFlag bool
-	servicesToSyncFlags   map[string]*bool
+	servicesToSyncFlags map[string]*bool
+	profileSyncFlag     bool
 )
 
 func init() {
 	RootCmd.AddCommand(syncCmd)
-	syncCmd.Flags().BoolVarP(&dryRunSyncFlag, "dry-run", "d", false, "Display the diff between local and remote cloud, but do not write to disk")
-	syncCmd.Flags().BoolVar(&diffFlag, "diff", false, "Display the diff between local and remote cloud, after syncing")
-	syncCmd.Flags().BoolVarP(&syncShowPropetiesFlag, "show-properties", "p", false, "Show diff of properties")
+	syncCmd.Flags().BoolVar(&profileSyncFlag, "profile-sync", false, "Will dump a cpu and mem profiling file")
 
 	servicesToSyncFlags = make(map[string]*bool)
-	for _, service := range aws.ServiceNames {
+	for _, service := range awsservices.ServiceNames {
 		servicesToSyncFlags[service] = new(bool)
 		syncCmd.Flags().BoolVar(servicesToSyncFlags[service], service, false, fmt.Sprintf("Sync '%s' service only", service))
 	}
 }
 
 var syncCmd = &cobra.Command{
-	Use:                "sync",
-	Short:              "Manage your local infrastructure",
-	PersistentPreRun:   applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, checkStatsHook),
-	PersistentPostRunE: saveHistoryHook,
+	Use:               "sync",
+	Short:             "Manual sync of remote resources to the local store (ex: when autosync is unset)",
+	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, firstInstallDoneHook),
+	PersistentPostRun: applyHooks(verifyNewVersionHook, onVersionUpgrade, networkMonitorHook),
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var services []cloud.Service
@@ -71,40 +68,79 @@ var syncCmd = &cobra.Command{
 				services = append(services, srv)
 			}
 		}
-		localGraphs := make(map[string]*graph.Graph)
+		localGraphs := make(map[string]cloud.GraphAPI)
 		for _, service := range services {
-			localGraphs[service.Name()] = sync.LoadCurrentLocalGraph(service.Name())
+			localGraphs[service.Name()] = sync.LoadLocalGraphForService(service.Name(), config.GetAWSProfile(), config.GetAWSRegion())
+		}
+		logger.Infof("running sync for region '%s'", config.GetAWSRegion())
+
+		var syncErr error
+		var graphs map[string]cloud.GraphAPI
+		syncFn := func() {
+			graphs, syncErr = sync.DefaultSyncer.Sync(services...)
 		}
 
-		graphs, err := sync.DefaultSyncer.Sync(services...)
-		if err != nil {
-			return err
+		start := time.Now()
+		if profileSyncFlag {
+			withProfiling(syncFn)
+		} else {
+			syncFn()
+		}
+		if syncErr != nil {
+			logger.Verbose(syncErr)
 		}
 
-		if dryRunSyncFlag && config.AwlessFirstSync {
-			exitOn(errors.New("No local data for printing diff. You might want to perfom a full sync first with `awless sync`"))
+		for k, g := range graphs {
+			displaySyncStats(k, g)
 		}
-		if diffFlag || dryRunSyncFlag {
-			printFormat := "tree"
-			if syncShowPropetiesFlag {
-				printFormat = "table"
-			}
-			region := database.MustGetDefaultRegion()
-			root := graph.InitResource(region, graph.Region)
-			for _, service := range services {
-				diff, err := graph.Differ.Run(root, localGraphs[service.Name()], graphs[service.Name()])
-				exitOn(err)
-				if diff.HasDiff() {
-					fmt.Printf("------%s------\n", strings.ToUpper(service.Name()))
-					displayer := console.BuildOptions(
-						console.WithFormat(printFormat),
-						console.WithRootNode(root),
-					).SetSource(diff).Build()
-					exitOn(displayer.Print(os.Stdout))
-				}
-			}
-		}
+		logger.Infof("sync took %s", time.Since(start))
 
 		return nil
 	},
+}
+
+func withProfiling(fn func()) {
+	logger.Infof("sync profiling on")
+	mem, err := os.Create("mem-sync.prof")
+	if err != nil {
+		log.Fatal("could not create mem profile: ", err)
+	}
+	logger.Infof("running garbage collection before profiling")
+	runtime.GC() // cleaned up memeory before running function
+	defer mem.Close()
+
+	cpu, err := os.Create("cpu-sync.prof")
+	if err != nil {
+		log.Fatal("could not create cpu profile: ", err)
+	}
+	if err := pprof.StartCPUProfile(cpu); err != nil {
+		log.Fatal("could not start cpu profile: ", err)
+	}
+
+	fn()
+
+	pprof.StopCPUProfile()
+	if err := pprof.WriteHeapProfile(mem); err != nil {
+		log.Fatal("could not write memory profile: ", err)
+	}
+	logger.Infof("Generated profiling files %s and %s", cpu.Name(), mem.Name())
+}
+
+func displaySyncStats(serviceName string, g cloud.GraphAPI) {
+	var strs []string
+	for rt, service := range awsservices.ServicePerResourceType {
+		if service == serviceName {
+			res, err := g.Find(cloud.NewQuery(rt))
+			if err != nil {
+				continue
+			}
+			nbRes := len(res)
+			if nbRes > 1 {
+				strs = append(strs, fmt.Sprintf("%d %s", nbRes, cloud.PluralizeResource(rt)))
+			} else {
+				strs = append(strs, fmt.Sprintf("%d %s", nbRes, rt))
+			}
+		}
+	}
+	logger.Infof("-> %s: %s", serviceName, strings.Join(strs, ", "))
 }

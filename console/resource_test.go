@@ -21,48 +21,35 @@ import (
 	"testing"
 
 	"github.com/wallix/awless/graph"
+	"github.com/wallix/awless/graph/resourcetest"
 )
 
 func TestResourceDisplay(t *testing.T) {
 	g := graph.NewGraph()
 
-	res1 := graph.InitResource("inst_1", graph.Instance)
-	res1.Properties = map[string]interface{}{
-		"Id":     "inst_1",
-		"Name":   "instance 1",
-		"Prop 1": "prop 1",
-		"Prop 2": "prop 2",
+	res1 := resourcetest.Instance("inst_1").Prop("ID", "inst_1").Prop("Name", "instance 1").Build()
+	res2 := resourcetest.Instance("inst_2").Prop("ID", "inst_2").Build()
+
+	if err := g.AddResource(res1, res2); err != nil {
+		t.Fatal(err)
 	}
-	res2 := graph.InitResource("inst_2", graph.Instance)
 
-	g.AddResource(res1, res2)
-
-	r, err := g.GetResource(graph.Instance, "inst_1")
+	r, err := g.GetResource("instance", "inst_1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	headers := []ColumnDefinition{
-		StringColumnDefinition{Prop: "Id"},
-		StringColumnDefinition{Prop: "Name"},
-		StringColumnDefinition{Prop: "State"},
-		StringColumnDefinition{Prop: "Type"},
-		StringColumnDefinition{Prop: "PublicIp", Friendly: "Public IP"},
-	}
+	columns := []string{"ID", "Name"}
 
-	displayer := BuildOptions(
-		WithHeaders(headers),
+	displayer, _ := BuildOptions(
+		WithColumns(columns),
 		WithFormat("table"),
 	).SetSource(r).Build()
 
-	expected := `+------------+------------+
-| PROPERTY ▲ |   VALUE    |
-+------------+------------+
-| Id         | inst_1     |
+	expected := `| PROPERTY ▲ |   VALUE    |
+|------------|------------|
+| ID         | inst_1     |
 | Name       | instance 1 |
-| Prop 1     | prop 1     |
-| Prop 2     | prop 2     |
-+------------+------------+
 `
 	var w bytes.Buffer
 	if err := displayer.Print(&w); err != nil {

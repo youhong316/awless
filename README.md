@@ -1,167 +1,201 @@
-`awless` is a fast, powerful and easy-to-use command line interface (CLI) to manage Amazon Web Services.
+
+
+[![Build Status](https://api.travis-ci.org/wallix/awless.svg?branch=master)](https://travis-ci.org/wallix/awless)
+[![Go Report Card](https://goreportcard.com/badge/github.com/wallix/awless)](https://goreportcard.com/report/github.com/wallix/awless)
+
+<img src="https://user-images.githubusercontent.com/808274/33351381-5b9a0d00-d458-11e7-91ed-cf7ada7237c1.png" alt="terminal icon" width="48"> `awless` is a powerful, innovative and small surface command line interface (CLI) to manage Amazon Web Services.
+
+[Twitter](http://twitter.com/awlessCLI) | [Wiki](https://github.com/wallix/awless/wiki) | [Changelog](https://github.com/wallix/awless/blob/master/CHANGELOG.md#readme)
 
 # Why awless
 
-`awless` has been created with the idea to:
+`awless` stands out by having the following characteristics:
 
-- run frequent actions easily by using simple commands
-- explore easily your infrastructure and cloud resources inter relations via CLI
-- ensure smart defaults & security best practices
-- manage resources through robust runnable & scriptable templates (see [`awless` templates](https://github.com/wallix/awless/wiki/Templates))
+- small and hierarchical set of commands
+- a simple/powerful text [templating language](https://github.com/wallix/awless/wiki/Templates) to create and **revert** fully-fledged infrastructures 
+- wrapping/composing AWS API calls when necessary to enrich behaviour. Ex: ensure smart defaults, security best practices, etc. 
+- local log of all your cloud modifications done through `awless` to list/revert past actions
+- sync to a local graph storage of your cloud representation 
+- exploration of your cloud infrastructure and resources interrelations, **even offline** using the local graph storage
+- clearer and flexible terminal output's with: numerous formats (machine/human friendly), enriched resources's properties/relations when feasible
+- connect easily using awless' **smart SSH** to your private & public instances
 
-`awless` brings a new approach to manage virtualized infrastructures through CLI.
-
-# Overview
-
-- Clear and easy listing of multi-region cloud resources (subnets, instances, groups, users, etc.) on AWS EC2, IAM and S3: `awless list`
-- Multiple output formats either human (table, trees, ...) or machine readable (csv, json, ...): `--format`
-- Explore a resource given only an *id* or name (properties, relations, dependencies, ...): `awless show`
-- Creation, update and deletion (CRUD) of cloud resources and complex infrastructure with smart defaults through powerful awless templates: `awless run my-awless-templates/create_my_infra.txt`
-- Powerful CRUD CLI one-liner (integrated in the awless templating engine) with: `awless create instance ...`, `awless create vpc ...`, `awless attach policy ...`
-- Easy reporting of all the CLI template executions: `awless log`
-- Revert of executed templates and resources creation: `awless revert`
-- Aliasing of resources through their natural name so you don't have to always use cryptic ids that are impossible to remember
-- Inspectors are small CLI utilities to run analysis on your cloud resources graphs: `awless inspect`
-- CLI autocompletion for Unix/Linux's bash and zsh `awless completion`
-- (in progress) A local history and versioning of the changes that occurred in your cloud: `awless history`
-
-# Design concepts
-
-1. [RDF](https://www.w3.org/TR/rdf11-concepts/) is used internally to sync and model cloud resources locally. This permits a good flexibility in modeling while still allowing for DAG (Directed Acyclic Graph) properties and classic graph/tree traversal.
-2. Awless templates define a basic DSL (Domain Specific Language) for managing cloud resources. Templates are parsed against a [PEG (parsing expression grammar)](https://en.wikipedia.org/wiki/Parsing_expression_grammar) allowing for robust parsing, AST building/validation and execution of this AST through given official cloud drivers (ex: aws-sdk-go for AWS). More details on awless templates on the [wiki](https://github.com/wallix/awless/wiki/Templates).
+For more read our [FAQ](#faq) below (how `awless` compares to other tools, etc.)
 
 # Install
 
 Choose one of the following options:
 
-1. Download the latest `awless` binaries (Windows/Linux/macOS) [from Github](https://github.com/wallix/awless/releases/latest)
-2. If you have Golang already installed, build the source with: `go get github.com/wallix/awless`
+1. On macOS, use [homebrew](http://brew.sh):  `brew tap wallix/awless; brew install awless`
+2. With `curl` (macOS/Linux), run: `curl https://raw.githubusercontent.com/wallix/awless/master/getawless.sh | bash`
+3. Download the latest `awless` binaries (Windows/Linux/macOS) [from Github](https://github.com/wallix/awless/releases/latest)
+4. If you have Golang already installed, install from the source with: `go get -u github.com/wallix/awless`
 
-<!--- 3. On macOS, use [homebrew](http://brew.sh):  `brew install awless` -->
+If you have previously used the AWS CLI or aws-shell, you don't need to configure anything! Your config will be automatically loaded (i.e. ~/.aws/{credentials,config}) and `awless` will prompt for any missing info (more at our [getting started](https://github.com/wallix/awless/wiki/Getting-Started)).
+
+# Main features
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/wiki/wallix/awless/apng/awless-demo.png"><img src="https://raw.githubusercontent.com/wiki/wallix/awless/apng/awless-demo.png" alt="video of a few awless commands"></a>
+<br/>
+<em>Note that the video above is in <a href="https://en.wikipedia.org/wiki/APNG">APNG</a> and requires a recent browser.</em>
+</p>
+
+- **Aliasing of resources through their natural name** so you don't have to always use cryptic ids that are impossible to remember
+- `awless show` : Explore the  properties, relations, dependencies of a specific resource (even offline thanks to the sync) given only a *name* (or id/arn).
+
+      $ awless show jsmith --local
+
+- `awless list` : Clear and easy listing of multi-region cloud resources (subnets, instances, users, buckets, records, etc.) on AWS EC2, IAM, S3, RDS, AutoScaling, SNS, SQS, Route53, CloudWatch, CloudFormation, Lambda, etc. Listing filters via *resources properties* or *resources tags*.
+
+      $ awless list instances --sort uptime --local
+      $ awless list users --format csv --columns name,created
+      $ awless list volumes --filter state=use --filter type=gp2
+      $ awless list volumes --tag-value Purchased
+      $ awless ls vpcs --tag-key Dept --tag-key Internal --format tsv
+      $ awless ls instances --tag Env=Production,Dept=Marketing
+      $ awless ls instances --filter state=running,type=micro --format json
+      $ awless ls s3objects --filter bucket=pdf-bucket -r us-west-2
+      $ ...
+      (see awless ls -h)
+
+- `awless run` : Create, update and delete complex infrastructures with smart defaults and sound auto-complete through awless templates.
+
+      $ awless run ~/templates/my-infra.aws
+      $ awless run https://raw.githubusercontent.com/wallix/awless-templates/master/linux_bastion.aws
+      etc.
+
+- **Hundreds of powerful CRUD CLI one-liners** integrated in the awless templating engine:
+
+      $ awless create instance -h
+      $ awless create vpc -h
+      $ awless attach policy -h
+      $ ...
+      (see awless -h)
+
+- `awless log` : Detailled and easy reporting of all the CLI template executions
+- `awless revert` : Revert of executed templates and resources creation
+- Create instances straight from a distro name. No need to know the region or AMI ;) (_free tier community bare distro only_, see `awless create instance -h`)
+
+      $ awless create instance distro=debian
+      $ awless create instance distro=coreos
+      $ awless create instance distro=redhat::7.2 type=t2.micro
+      $ awless create instance distro=debian:debian:jessie lock=true
+      $ awless create instance distro=amazonlinux:amzn2
+      etc.
+
+- Leveraging AWS `userdata` to provision instance on creation from remote (i.e http) or local scripts: `awless create instance ... userdata=/home/john/...` 
+- `awless ssh` : Clean and simple SSH to public & private instances using only a name
+
+      $ awless ssh my-production-instance
+      $ awless ssh redis-prod --through jump-server
+      $ awless ssh 34.215.29.221
+      $ awless ssh db-private --private
+      $ awless ssh 172.31.77.151 --port 2222 --through my-proxy --through-port 23
+      $ ...
+      (see awless ssh -h)
+
+- `awless switch` : Switch easily between AWS accounts (i.e. profile) and regions
+
+      $ awless switch admin eu-west-2
+      $ awless switch us-west-1
+      $ awless switch mfa
+      etc.
+
+- `awless` transparently syncs cloud resources locally to a graph representation in order for the CLI to leverage data and their relations in other awless commands and in an offline manner ([more on the sync](https://github.com/wallix/awless/wiki/Getting-Started#sync))
+- `awless sync` : Explicit and manual command to fetch & store resources locally. Then query & inspect your cloud offline
+- Output listing formats either human (**default display is Markdown-compatible tables**) or machine readable (csv, tsv, json, ...): `--format`
+- `awless inspect` : Leverage **experimental** and community inspectors which are interface implementation utilities to run analysis on your cloud resources graphs
+
+      $ awless inspect -i bucket_sizer
+      (see awless inspect -h)
+
+- `awless completion` : CLI autocompletion for Unix/Linux's bash and zsh 
 
 # Getting started
 
-## Setup your AWS account with `awless`
+Take the tour at [Getting Started (wiki)](https://github.com/wallix/awless/wiki/Getting-Started) or read the [introductory blog post about awless](https://medium.com/@hbbio/awless-io-a-mighty-cli-for-aws-a0d48bdb59a4).
 
-You basically need your `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` exported in your environment.
+More articles:
 
-If you have previously used `aws` CLI or `aws-shell`, you don't need to do anything! Your credentials will be automatically loaded by `awless` from the `~/.aws/credentials` folder.
+   - [Simplified Multi-Factor Authentication for AWS](https://medium.com/@awlessCLI/simplified-multi-factor-authentication-for-aws-d703e8d9f332)
+   - [Simplified user management for AWS](https://medium.com/@awlessCLI/simplified-user-management-for-aws-6f828ccab387)
+   - [InfoWorld: Production-grade deployment of WordPress](https://www.infoworld.com/article/3230547/cloud-computing/awless-tutorial-try-a-smarter-cli-for-aws.html)
+   - [Easy create & tear down of a multi-AZ CockroachDB cluster](https://github.com/wallix/awless-templates/tree/master/cockroachdb)
+   - [Deploy Vuls.io to an AWS instance and scan for vulnerabilities](https://github.com/wallix/awless-templates/tree/master/vuln_scanners)
 
-Otherwise, get your AWS credentials from [IAM console](https://console.aws.amazon.com/iam/home?#home).
-Then, you can download and store them to `~/.aws/credentials` (Unix) or `%UserProfile%\.aws\credentials` (Windows).
+# Awards
 
-For more options, see [Installation (wiki)](https://github.com/wallix/awless/wiki/Installation#setup-your-aws-account-with-awless).
+- [Top 50 Developer Tools of 2017](https://stackshare.io/posts/top-developer-tools-2017)
+- [InfoWorld Bossie Awards 2017](https://www.infoworld.com/article/3227920/cloud-computing/bossie-awards-2017-the-best-cloud-computing-software.html#slide12)
 
-## Setup shell autocompletion
+# FAQ
 
-Awless has commands, subcommands and flag completion. It becomes really useful for CRUD onliner when managing resources for example.
+Here is a compilation of the question we often answer (thanks for asking them so that we can make things clearer!):
 
-Read the wiki page for setting autocompletion for [bash](https://github.com/wallix/awless/wiki/Setup-Autocomplete#bash) or [zsh](https://github.com/wallix/awless/wiki/Setup-Autocomplete#zsh).
+**There are already some AWS CLIs. What is `awless` unique approach?**
 
-## Disclaimer
+Three things that differentiates `awless` from other AWS CLIs:
 
-Awless allows for easy resource creation with your cloud provider; We will not be responsible for any cloud costs incurred (even if you create a million instances using awless templates).
+* It has its own **compiled and very simple templating language** to build AWS infrastructures.
+* Commands are made of _VERB + ENTITY [+ param=value]_ and are actually valid lines of the template language. 
+* It transparently syncs to a local graph a representation of the cloud resources and their relations.
 
-We also collect a few anonymous data (CLI errors, most frequently used commands and count of resources).
+Leveraging and combining the points above, `awless` lays some strong foundations for plenty of current/future features/characteristic such as:
 
-## First `awless` commands
+- Wrapping AWS API calls to enrich them with before/after behaviour when interacting with the cloud
+- Having a small and hierarchical set of commands to intuitively interact with AWS
+- Enriching listing of resources using the local model and relations that are not calculated with other CLIs
+- Referencing and finding resources quickly avoiding cryptic IDs in favor of names, etc.
+- Exposing in the terminal relation between resources: lineage, siblings, etc.
+- Performing local analysis of your cloud
+- Having a smart SSH to easily connect to instances
+- etc.
 
-`awless` works by performing commands, which query either the AWS services or a local snapshot of the cloud services.
+**How do you create infrastructure with `awless`?**
 
-### Listing resources
+You build infrastructure using `template files` or `command one-liners` that get compiled and run through `awless` builtin engine. See [what the templating language looks like](https://github.com/wallix/awless-templates/blob/master/cockroachdb/cockroach_insecure_cluster.aws). Learn [more about the way templates work](https://github.com/wallix/awless/wiki/Templates)
 
-You can list various resources:
+Note that all your actions against the cloud are logged. Templates are revertible/rollbackable.
 
-    $ awless list buckets
-    $ awless list instances --sort launchtime
-    $ awless list users --format csv
-    $ awless list roles --sort name,id
+**How does `awless` compares to `aws-shell` or `saws`?**
 
-Listing resources by default performs queries directly to AWS. If you want, you can also query the local snapshot:
+(Points above should also help answering this question)
 
-    $ awless list subnets --local
+`aws-shell` and `saws` are directly mapped to the official AWS CLI. Their **only** objective is to make you productive and help you manage exhaustively the sheer number of AWS services, options, etc.
 
-See the [manual](https://github.com/wallix/awless/wiki/Commands#awless-list) for a complete reference of `awless list`.
+`awless` addresses this UI/productivity concern differently: small and hierarchical set of commands; favoring enriched listing with relations showing over AWS exhaustive outputting of properties; more useful human/machine formats.
 
-### Creating, Updating and Deleting resources
+The main point is that **the UI/productivity concern is just a feature of awless and not its primary or only one**, so there is much more to the tool.
 
-`awless` provides a powerful template system to interact with cloud infrastructures.
+Also `aws-shell` and `saws` are exhaustive in their support of AWS services. `awless` is so far more infrastructure centric, with an emphasis on enriching the information about your real infrastructure. `awless` is able to add any new AWS service quickly if that fits and make sense (see wiki on how to add a new AWS service).
 
-`awless` templates can be used through onliner shortcut commands:
+**How does `awless` compares to Terraform?**
 
-    awless create instance
-    awless delete subnet id=subnet-12345678
-    awless attach volume id=vol-12345678 instance=i-12345678
+Terraform is a great product! `awless` is much younger than Terraform and Terraform is much broader in scope. 
 
-See [templates commands (wiki)](https://github.com/wallix/awless/wiki/Templates#Commands) for more commands.
+The approach is different though. When creating insfrastructure `awless`:
 
-You can also run an `awless` template from a predefined template file with:
+- favors simplicity with a straight forward, compiled and simple deployment language
+- employs an all-or-nothing deployment: do not keep state, etc.
+- `awless` does provide a rollback on any ran template.
 
-    awless run awless-templates/create_instance_ssh.awless
+**Does `awless` handles state when creating infrastructure (i.e. keep track of the changes)?**
 
-In each case, the CLI guide you through any running of a template (file template or oneliner) so you always have the chance to confirm or quit.
+Quoting from a [logz.io/blog entry](https://logz.io/blog/terraform-ansible-puppet/): _"Terraform is an amazing tool but a major challenge is managing the state file. Whenever you apply changes to your infrastructure, the entire managed body of code and created objects are tracked in the Terraform State file (.tfstate), which can reach hundreds of thousands of lines and must be managed carefully lest you incur large merge conflicts or unwanted resource changes"_, Ofer Velich.
 
-Note that you can get inspired with pre-existing templates from the dedicated git repository: https://github.com/wallix/awless-templates. See [templates (wiki)](https://github.com/wallix/awless/wiki/Templates) for more details about `awless` templates.
+As for now with `awless`, we have taken a different path: `awless` does not keep state of your cloud; it is more of an all-or-nothing deployment solution. 
 
-### Log & revert executed template commands
-
-To list a detailled account of the last actions you have run on your cloud:
-
-    awless log
-
-Each `awless` command that changes the cloud infrastructure is associated with an unique *id* referencing the (un)successful actions. Using this id you can revert a executed template with:
-
-    awless revert 01B89ZY529E5D7WKDTQHFC0RPA
-
-The CLI guide you through a revert action and you have the chance to confirm or quit.
-
-### SSH
-
-You can directly ssh to an instance with:
-
-        $ awless ssh i-abcd1234
-        $ awless ssh ubuntu@i-abcd1234
-
-In the first case, note that `awless` can work out the default ssh user to use given a cloud (ex: `ec2` for AWS)
-
-### Aliasing
-
-When it makes sense we provide the concept of *alias*. Cloud resources ids can be a bit cryptic. An alias is just an already existing name of a resource. Given a alias we resolve the proper resource id. For instance:
-
-        $ awless ssh my-instance         # ssh to the instance by name. awless resolves its id
-        $ awless delete id=@my-instance  # delete an instance using its name
-
-### Inspectors
-
-Inspectors are small CLI utilities that leverage `awless` graph modeling of cloud resources. Basically an inspector is a program that implements the following interface:
-
-```go
-type Inspector interface {
-    Inspect(...*graph.Graph) error
-    Print(io.Writer)
-    Name() string            # name of the inspector
-    Services() []string      # name of the services (ec2, iam, s3, ...) the inspector operates on
-}
-```
-
-Using `awless` cloud resources local synchronisation functionality, you can analyse your data offline (i.e: on your local graphs). There are some builtin inspectors that serve as examples: `pricer`, `bucket_sizer`, etc...
-
-For example, you would run the `bucket_sizer` inspector with:
-
-       $ awless inspect -i bucket_sizer --local
-       Bucket           Object count    S3 total storage
-       --------         ----------      -----------------
-       my-first-bucket     4            0.00358 Gb
-       my-other-bucket     1            3.49460 Gb
-       third-bucket        422          0.00003 Gb
-       fouth-bucket        1000         0.00772 Gb
-                                        3.5059 Gb
+Note that `awless` logs (through rich and revertable logs) all your actions against the cloud and that you can revert any template ran.
 
 # About
 
-`awless` is an open source project created by Henri Binsztok, Quentin Bourgerie, Simon Caplette and François-Xavier Aguessy at Wallix.
+`awless` is an open source project created by Henri Binsztok, Quentin Bourgerie, Simon Caplette and François-Xavier Aguessy at WALLIX.
 `awless` is released under the Apache License and sponsored by [Wallix](https://github.com/wallix).
 
+    Disclaimer: Awless allows for easy resource creation with your cloud provider;
+    we will not be responsible for any cloud costs incurred (even if you create a 
+    million instances using awless templates).
+
 Contributors are welcome! Please head to [Contributing (wiki)](https://github.com/wallix/awless/wiki/Contributing) to learn more.
-
-
+Note that `awless` uses [triplestore](https://github.com/wallix/triplestore) another project developped at WALLIX.

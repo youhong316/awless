@@ -19,9 +19,13 @@ limitations under the License.
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -33,23 +37,26 @@ import (
 )
 
 var (
-	releaseTag = flag.String("rtag", "", "Git tag to be released")
+	releaseTag = flag.String("tag", "", "Git tag to be released")
+	brew       = flag.Bool("brew", false, "Brew build (disable zipping and build only for specify os and arch)")
+	buildOS    = flag.String("os", runtime.GOOS, "The OS to build")
+	buildArch  = flag.String("arch", runtime.GOARCH, "The ARCH to build")
 )
 
 var builds = map[string][]string{
-	"darwin":  []string{"amd64"},
-	"linux":   []string{"386", "amd64"},
-	"windows": []string{"386", "amd64"},
+	"darwin":  {"amd64"},
+	"linux":   {"386", "amd64"},
+	"windows": {"386", "amd64"},
 }
 
 func main() {
 	flag.Parse()
 
 	allBuild := map[string][]string{
-		runtime.GOOS: []string{runtime.GOARCH},
+		*buildOS: {*buildArch},
 	}
 
-	if *releaseTag != "" {
+	if *releaseTag != "" && !*brew {
 		allBuild = builds
 		printInfo("RELEASING")
 	}
@@ -111,11 +118,19 @@ func buildAndZip(osname, arch string) error {
 		return err
 	}
 
-	buildInfo := fmt.Sprintf("-X github.com/wallix/awless/config.buildDate=%s -X github.com/wallix/awless/config.buildSha=%s -X github.com/wallix/awless/config.buildOS=%s -X github.com/wallix/awless/config.buildArch=%s",
+	buildFor := "targz"
+	if *brew {
+		buildFor = "brew"
+	} else if osname == "windows" {
+		buildFor = "zip"
+	}
+
+	buildInfo := fmt.Sprintf("-X github.com/wallix/awless/config.buildDate=%s -X github.com/wallix/awless/config.buildSha=%s -X github.com/wallix/awless/config.buildOS=%s -X github.com/wallix/awless/config.buildArch=%s -X github.com/wallix/awless/config.BuildFor=%s",
 		time.Now().Format(time.RFC3339),
 		strings.TrimSpace(sha),
 		osname,
 		arch,
+		buildFor,
 	)
 
 	ldflags := fmt.Sprintf("-ldflags=-s -w %s", buildInfo)
@@ -124,28 +139,66 @@ func buildAndZip(osname, arch string) error {
 		return err
 	}
 
-	zipFile, err := os.OpenFile(fmt.Sprintf("%s-%s-%s.zip", strings.Split(binName, ".")[0], osname, arch), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
-	if err != nil {
-		return err
+	switch buildFor {
+	case "brew": //No zipping
+		fmt.Println("DO NOT forget to update the brew bottles and formula (see homebrew-awless Github repo)!")
+		return os.Rename(artefactPath, "awless")
+	case "zip":
+		zipFile, err := os.OpenFile(fmt.Sprintf("%s-%s-%s.zip", strings.Split(binName, ".")[0], osname, arch), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+		if err != nil {
+			return err
+		}
+
+		w := zip.NewWriter(zipFile)
+
+		f, err := w.Create(binName)
+		if err != nil {
+			return err
+		}
+
+		content, err := ioutil.ReadFile(artefactPath)
+		if err != nil {
+			return err
+		}
+
+		if _, err = f.Write(content); err != nil {
+			return err
+		}
+
+		return w.Close()
+	case "targz":
+		tarball, err := os.Create(fmt.Sprintf("%s-%s-%s.tar.gz", strings.Split(binName, ".")[0], osname, arch))
+		if err != nil {
+			return err
+		}
+		defer tarball.Close()
+
+		gw := gzip.NewWriter(tarball)
+		defer gw.Close()
+
+		tw := tar.NewWriter(gw)
+		defer tw.Close()
+
+		binFile, err := os.Open(artefactPath)
+		if err != nil {
+			return err
+		}
+		defer binFile.Close()
+
+		if stat, err := binFile.Stat(); err != nil {
+			return err
+		} else if tarHeader, err := tar.FileInfoHeader(stat, ""); err == nil {
+			if err := tw.WriteHeader(tarHeader); err != nil {
+				return err
+			}
+			if _, err := io.Copy(tw, binFile); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return errors.New("missing packaging method")
 	}
-
-	w := zip.NewWriter(zipFile)
-
-	f, err := w.Create(binName)
-	if err != nil {
-		return err
-	}
-
-	content, err := ioutil.ReadFile(artefactPath)
-	if err != nil {
-		return err
-	}
-
-	if _, err = f.Write(content); err != nil {
-		return err
-	}
-
-	return w.Close()
 }
 
 type environment []string

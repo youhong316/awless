@@ -17,8 +17,6 @@ limitations under the License.
 package database
 
 import (
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -27,40 +25,44 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/wallix/awless/cloud/aws"
 )
 
 const (
-	salt             = "bg6B8yTTq8chwkN0BqWnEzlP4OkpcQDhO45jUOuXm1zsNGDLj3"
-	databaseFilename = "awless.db"
+	Filename     = "awless.db"
+	awlessBucket = "awless"
 )
 
-// A DB stores awless config, logs...
 type DB struct {
 	bolt *bolt.DB
 }
 
-func MustGetCurrent() (*DB, func()) {
-	db, err, close := Current()
+func Execute(fn func(*DB) error) error {
+	db, err := current()
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return db, close
+	defer db.Close()
+
+	return fn(db)
 }
 
-func Current() (*DB, error, func()) {
+func current() (*DB, error) {
 	awlessHome := os.Getenv("__AWLESS_HOME")
 	if awlessHome == "" {
-		return nil, errors.New("database: awless home is not set"), nil
+		return nil, errors.New("database: awless home is not set")
 	}
-	db, err := open(filepath.Join(awlessHome, databaseFilename))
+
+	path := filepath.Join(awlessHome, Filename)
+	db, err := open(path)
 	if err != nil {
-		return nil, err, nil
+		return nil, err
 	}
-	todefer := func() {
-		db.Close()
+
+	if db == nil {
+		return nil, fmt.Errorf("db is nil while no error in opening at '%s'", path)
 	}
-	return db, nil, todefer
+
+	return db, nil
 }
 
 func open(path string) (*DB, error) {
@@ -70,41 +72,6 @@ func open(path string) (*DB, error) {
 	}
 
 	return &DB{bolt: boltdb}, nil
-}
-
-func InitDB() error {
-	db, err, closing := Current()
-	defer closing()
-	if err != nil {
-		return fmt.Errorf("database init: %s", err)
-	}
-	id, err := db.GetStringValue(AwlessIdKey)
-	if err != nil || id == "" {
-		userID, err := aws.SecuAPI.GetUserId()
-		if err != nil {
-			return err
-		}
-		newID, err := generateAnonymousID(userID)
-		if err != nil {
-			return err
-		}
-		if err = db.SetStringValue(AwlessIdKey, newID); err != nil {
-			return err
-		}
-		accountID, err := aws.SecuAPI.GetAccountId()
-		if err != nil {
-			return err
-		}
-		aID, err := generateAnonymousID(accountID)
-		if err != nil {
-			return err
-		}
-		if err = db.SetStringValue(AwlessAIdKey, aID); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // DeleteBucket deletes a bucket if it exists
@@ -182,6 +149,7 @@ func (db *DB) Close() {
 		db.bolt.Close()
 	}
 }
+
 func (db *DB) deleteBucket(name string) error {
 	return db.bolt.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(name))
@@ -216,50 +184,4 @@ func (db *DB) setValue(key string, value []byte) error {
 		}
 		return b.Put([]byte(key), value)
 	})
-}
-
-func (db *DB) addLineToBucket(bucket string, l line) error {
-	return db.bolt.Update(func(tx *bolt.Tx) error {
-		b, e := tx.CreateBucketIfNotExists([]byte(bucket))
-		if e != nil {
-			return e
-		}
-
-		id, e := b.NextSequence()
-		if e != nil {
-			return e
-		}
-		l.ID = int(id)
-
-		buf, e := json.Marshal(l)
-		if e != nil {
-			return e
-		}
-		return b.Put(itob(l.ID), buf)
-	})
-}
-
-func (db *DB) getLinesFromBucket(bucket string, fromID int) ([]*line, error) {
-	var result []*line
-	err := db.bolt.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(historyBucketName))
-		if b == nil {
-			return nil
-		}
-		c := b.Cursor()
-		for k, v := c.Seek(itob(fromID)); k != nil; k, v = c.Next() {
-			l := &line{}
-			e := json.Unmarshal(v, l)
-			if e != nil {
-				return e
-			}
-			result = append(result, l)
-		}
-		return nil
-	})
-	return result, err
-}
-
-func generateAnonymousID(seed string) (string, error) {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(salt+seed))), nil
 }

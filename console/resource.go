@@ -19,47 +19,65 @@ package console
 import (
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/wallix/awless/graph"
+	"github.com/wallix/awless/cloud"
 )
 
 type tableResourceDisplayer struct {
-	r       *graph.Resource
-	headers []ColumnDefinition
+	maxwidth          int
+	r                 cloud.Resource
+	columnDefinitions []ColumnDefinition
 }
 
 func (d *tableResourceDisplayer) Print(w io.Writer) error {
-	values := make(table, len(d.r.Properties))
+	values := make(table, len(d.r.Properties()))
 
 	i := 0
-	for prop, val := range d.r.Properties {
+	propertyNameMaxWith := 13
+	for prop, val := range d.r.Properties() {
 		var header ColumnDefinition
-		for _, h := range d.headers {
+		for _, h := range d.columnDefinitions {
 			if h.propKey() == prop {
 				header = h
 			}
 		}
 		if header == nil {
-			header = &StringColumnDefinition{Prop: prop, DisableTruncate: true}
+			header = &StringColumnDefinition{Prop: prop}
 		}
 
 		if v := values[i]; v == nil {
 			values[i] = make([]interface{}, 2)
 		}
-		values[i][0] = header.title(false)
+		values[i][0] = header.title()
+		if l := len(header.title()); l > propertyNameMaxWith {
+			propertyNameMaxWith = l
+		}
 		values[i][1] = header.format(val)
 		i++
 	}
 
-	sort.Sort(byCols{table: values, sortBy: []int{0}})
+	ds := defaultSorter{sortBy: []int{0}}
+	ds.sort(values)
+
+	valueColumnMaxwidth := d.maxwidth - (propertyNameMaxWith + 7) // ( = border + 2 * margin + border + 2 * margin + border)
+	if valueColumnMaxwidth <= 0 {
+		valueColumnMaxwidth = 50
+	}
 
 	table := tablewriter.NewWriter(w)
-	table.SetHeader([]string{"Property" + ascSymbol, "Value"})
+	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+	table.SetColWidth(valueColumnMaxwidth)
+	table.SetCenterSeparator("|")
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.SetHeader([]string{"Property" + ds.symbol(), "Value"})
+
+	wraper := autoWraper{maxWidth: valueColumnMaxwidth, wrappingChar: " "}
 
 	for i := range values {
-		table.Append([]string{fmt.Sprint(values[i][0]), fmt.Sprint(values[i][1])})
+		if val := fmt.Sprint(values[i][1]); val != "" {
+			table.Append([]string{fmt.Sprint(values[i][0]), wraper.Wrap(val)})
+		}
 	}
 
 	table.Render()
@@ -67,6 +85,6 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 	return nil
 }
 
-func (d *tableResourceDisplayer) SetResource(r *graph.Resource) {
+func (d *tableResourceDisplayer) SetResource(r cloud.Resource) {
 	d.r = r
 }

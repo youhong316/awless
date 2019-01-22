@@ -20,17 +20,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/graph"
 
 	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 type Rev struct {
@@ -49,48 +48,50 @@ type Repo interface {
 	Commit(files ...string) error
 	List() ([]*Rev, error)
 	LoadRev(version string) (*Rev, error)
+	BaseDir() string
 }
 
-type noRevisionRepo struct{}
+type NullRepo struct{}
 
-func (*noRevisionRepo) Commit(files ...string) error         { return nil }
-func (*noRevisionRepo) LoadRev(version string) (*Rev, error) { return &Rev{}, nil }
-func (*noRevisionRepo) List() ([]*Rev, error)                { return nil, nil }
+func (NullRepo) Commit(files ...string) error         { return nil }
+func (NullRepo) List() ([]*Rev, error)                { return nil, nil }
+func (NullRepo) LoadRev(version string) (*Rev, error) { return nil, nil }
+func (NullRepo) BaseDir() string                      { return "" }
 
 type gitRepo struct {
-	repo  *git.Repository
-	files []string
-	path  string
+	repo    *git.Repository
+	basedir string
+}
+
+func BaseDir() string {
+	return filepath.Join(os.Getenv("__AWLESS_HOME"), "aws", "rdf")
 }
 
 func New() (Repo, error) {
-	if IsGitInstalled() {
-		return newGitRepo(config.RepoDir)
-	} else {
-		return &noRevisionRepo{}, nil
-	}
-}
-
-func IsGitInstalled() bool {
-	_, err := exec.LookPath("git")
-	return err == nil
+	dir := BaseDir()
+	os.MkdirAll(dir, 0700)
+	return newGitRepo(dir)
 }
 
 func newGitRepo(path string) (Repo, error) {
 	if _, err := os.Stat(filepath.Join(path, ".git")); os.IsNotExist(err) {
-		if _, err := newGit(path).run("init"); err != nil {
+		if _, err := git.PlainInit(path, false); err != nil {
 			return nil, err
 		}
 	}
 
-	repo, err := git.NewFilesystemRepository(filepath.Join(path, ".git"))
-	return &gitRepo{repo: repo, path: path}, err
+	repo, err := git.PlainOpen(path)
+	return &gitRepo{repo: repo, basedir: path}, err
+}
+
+func (r *gitRepo) BaseDir() string {
+	return r.basedir
 }
 
 func (r *gitRepo) List() ([]*Rev, error) {
 	var all []*Rev
 
-	iter, err := r.repo.Commits()
+	iter, err := r.repo.CommitObjects()
 	if err != nil {
 		return all, err
 	}
@@ -108,7 +109,7 @@ func (r *gitRepo) List() ([]*Rev, error) {
 		all = append(all, &Rev{Id: commit.Hash.String(), Date: commit.Committer.When})
 	}
 
-	sort.Sort(revsByDate(all))
+	sort.Slice(all, func(i, j int) bool { return all[i].Date.Before(all[j].Date) })
 
 	return all, nil
 }
@@ -123,7 +124,7 @@ func reduceToLastRevOfEachDay(revs []*Rev) []*Rev {
 
 	reduce := []*Rev{}
 	for _, v := range perDay {
-		sort.Sort(sort.Reverse(revsByDate(v)))
+		sort.Slice(v, func(i, j int) bool { return v[i].Date.After(v[j].Date) })
 		reduce = append(reduce, v[0])
 	}
 
@@ -133,72 +134,55 @@ func reduceToLastRevOfEachDay(revs []*Rev) []*Rev {
 func (r *gitRepo) LoadRev(version string) (*Rev, error) {
 	rev := &Rev{Id: version}
 
-	commit, err := r.repo.Commit(plumbing.NewHash(version))
+	commit, err := r.repo.CommitObject(plumbing.NewHash(version))
 	if err != nil {
 		return nil, err
 	}
 
 	rev.Date = commit.Committer.When
 
-	f, err := commit.File(config.InfraFilename)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := f.Contents()
-	if err != nil {
-		return nil, err
-	}
+	rev.Infra = graph.NewGraph()
+	rev.Access = graph.NewGraph()
 
-	infraG := graph.NewGraph()
-	infraG.Unmarshal([]byte(contents))
-	rev.Infra = infraG
-
-	f, err = commit.File(config.AccessFilename)
-	if err != nil {
-		return nil, err
+	if err := unmarshalIntoGraph(rev.Infra, commit, "infra.triples"); err != nil {
+		return rev, err
 	}
-	contents, err = f.Contents()
-	if err != nil {
-		return nil, err
+	if err := unmarshalIntoGraph(rev.Access, commit, "access.triples"); err != nil {
+		return rev, err
 	}
-	accessG := graph.NewGraph()
-	accessG.Unmarshal([]byte(contents))
-	rev.Access = accessG
 
 	return rev, nil
 }
 
-func (r *gitRepo) Commit(files ...string) error {
-	for _, path := range files {
-		r.files = append(r.files, path)
+func unmarshalIntoGraph(g *graph.Graph, commit *object.Commit, filename string) error {
+	f, err := commit.File(filename)
+	if err != nil && err != object.ErrFileNotFound {
+		return err
+	} else if err == nil {
+		contents, err := f.Contents()
+		if err != nil {
+			return err
+		}
+		g.Unmarshal([]byte(contents))
+	}
+	return nil
+}
+
+func (r *gitRepo) Commit(relativePaths ...string) error {
+	wt, err := r.repo.Worktree()
+	if err != nil {
+		return err
 	}
 
-	for _, path := range r.files {
-		if _, err := newGit(r.path).run("add", path); err != nil {
+	for _, f := range relativePaths {
+		if _, err := wt.Add(f); err != nil {
 			return err
 		}
 	}
 
-	if hasChanges, err := r.hasChanges(); err != nil {
-		return err
-	} else if !hasChanges {
-		return nil
-	}
+	msg := fmt.Sprintf("syncing %s", strings.Join(relativePaths, ", "))
+	committer := &object.Signature{Name: "awlessCLI", When: time.Now(), Email: "git@awless.io"}
 
-	_, err := newGit(r.path).run(
-		append(awlessCommitter, "commit", "-m", fmt.Sprintf("syncing %s", strings.Join(files, ", ")))...,
-	)
-
+	_, err = wt.Commit(msg, &git.CommitOptions{Author: committer})
 	return err
-}
-
-var awlessCommitter = []string{"-c", "user.name='awless'", "-c", "user.email='git@awless.io'"}
-
-func (r *gitRepo) hasChanges() (bool, error) {
-	stdout, err := newGit(r.path).run("status", "--porcelain")
-	if err != nil {
-		return false, err
-	}
-
-	return !(strings.TrimSpace(stdout) == ""), nil
 }

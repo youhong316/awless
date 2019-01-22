@@ -17,252 +17,357 @@ limitations under the License.
 package graph
 
 import (
-	"fmt"
-	"net"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
-	"time"
+
+	"github.com/wallix/awless/cloud"
+	"github.com/wallix/awless/cloud/match"
+	"github.com/wallix/awless/cloud/properties"
+	"github.com/wallix/awless/cloud/rdf"
+	tstore "github.com/wallix/triplestore"
 )
 
-func TestAddGraphRelation(t *testing.T) {
+func TestFindAncestors(t *testing.T) {
+	g := NewGraph()
+	inst := InitResource("instance", "inst_1")
+	sub := InitResource("subnet", "subnet_1")
+	region := InitResource("region", "north-korea")
+	g.AddResource(inst, sub, region)
+	g.AddParentRelation(sub, inst)
+	g.AddParentRelation(region, sub)
 
+	res := g.FindAncestor(inst, "region")
+	if got, want := res.Id(), "north-korea"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if got, want := res.Type(), "region"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	res = g.FindAncestor(inst, "subnet")
+	if got, want := res.Id(), "subnet_1"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if got, want := res.Type(), "subnet"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	res = g.FindAncestor(sub, "region")
+	if got, want := res.Id(), "north-korea"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	if got, want := res.Type(), "region"; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	res = g.FindAncestor(region, "region")
+	if res != nil {
+		t.Fatalf("got %v, want nil", res)
+	}
+}
+
+func TestAddGraphRelation(t *testing.T) {
 	t.Run("Add parent", func(t *testing.T) {
 		g := NewGraph()
-		g.Unmarshal([]byte(`/instance<inst_1>  "has_type"@[] "/instance"^^type:text`))
+		g.AddResource(InitResource("instance", "inst_1"))
 
-		res, err := g.GetResource(Instance, "inst_1")
+		res, err := g.GetResource("instance", "inst_1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.AddParentRelation(InitResource("subnet_1", Subnet), res)
+		g.AddParentRelation(InitResource("subnet", "subnet_1"), res)
 
-		exp := `/instance<inst_1>	"has_type"@[]	"/instance"^^type:text
-/subnet<subnet_1>	"parent_of"@[]	/instance<inst_1>`
+		expTriples := tstore.Triples([]tstore.Triple{
+			tstore.SubjPred("inst_1", "rdf:type").Resource("cloud-owl:Instance"),
+			tstore.SubjPred("inst_1", "cloud:id").StringLiteral("inst_1"),
+			tstore.SubjPred("subnet_1", "cloud-rel:parentOf").Resource("inst_1"),
+		})
 
-		if got, want := g.MustMarshal(), exp; got != want {
-			t.Fatalf("got\n%q\nwant\n%q\n", got, want)
+		if got, want := tstore.Triples(g.store.Snapshot().Triples()), expTriples; !got.Equal(want) {
+			t.Fatalf("got\n%v\nwant\n%v\n", got, want)
 		}
 	})
 
 	t.Run("Add applies on", func(t *testing.T) {
 		g := NewGraph()
-		g.Unmarshal([]byte(`/instance<inst_1>  "has_type"@[] "/instance"^^type:text`))
+		g.AddResource(InitResource("instance", "inst_1"))
 
-		res, err := g.GetResource(Instance, "inst_1")
+		res, err := g.GetResource("instance", "inst_1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.AddAppliesOnRelation(InitResource("subnet_1", Subnet), res)
+		g.AddAppliesOnRelation(InitResource("subnet", "subnet_1"), res)
 
-		exp := `/instance<inst_1>	"has_type"@[]	"/instance"^^type:text
-/subnet<subnet_1>	"applies_on"@[]	/instance<inst_1>`
+		expTriples := tstore.Triples([]tstore.Triple{
+			tstore.SubjPred("inst_1", "rdf:type").Resource("cloud-owl:Instance"),
+			tstore.SubjPred("inst_1", "cloud:id").StringLiteral("inst_1"),
+			tstore.SubjPred("subnet_1", "cloud-rel:applyOn").Resource("inst_1"),
+		})
 
-		if got, want := g.MustMarshal(), exp; got != want {
+		if got, want := tstore.Triples(g.store.Snapshot().Triples()), expTriples; !got.Equal(want) {
 			t.Fatalf("got\n%q\nwant\n%q\n", got, want)
 		}
 	})
 }
 
-func TestGetResource(t *testing.T) {
+func TestFind(t *testing.T) {
 	g := NewGraph()
-
-	g.Unmarshal([]byte(`/instance<inst_1>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Id","Value":"inst_1"}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Tags","Value":[{"Key":"Name","Value":"redis"}]}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Type","Value":"t2.micro"}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"PublicIp","Value":"1.2.3.4"}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"State","Value":{"Code": 16,"Name":"running"}}"^^type:text`))
-
-	res, err := g.GetResource(Instance, "inst_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := Properties{"Id": "inst_1", "Type": "t2.micro", "PublicIp": "1.2.3.4",
-		"State": map[string]interface{}{"Code": float64(16), "Name": "running"},
-		"Tags": []interface{}{
-			map[string]interface{}{"Key": "Name", "Value": "redis"},
+	i1 := instResource("i1").prop("Name", "redis").prop("Subnet", "s1").prop(properties.Tags, []string{"TagKey1=TagValue1"}).build()
+	i2 := instResource("i2").prop("Subnet", "s1").prop(properties.Tags, []string{"TagKey1=TagValue1"}).build()
+	s1 := subResource("s1").prop(properties.Tags, []string{"TagKey2=TagValue2"}).build()
+	s2 := subResource("s2").prop("Name", "prod").prop("ActiveServicesCount", 42).build()
+	v1 := vpcResource("v1").prop("Name", "prod").prop(properties.Tags, []string{"TagKey2=TagValue2"}).build()
+	g.AddResource(i1, i2, s1, s2, v1)
+	tcases := []struct {
+		query     cloud.Query
+		expectRes []cloud.Resource
+	}{
+		{
+			query:     cloud.NewQuery("instance"),
+			expectRes: []cloud.Resource{i1, i2},
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.Property("Subnet", "s1")),
+			expectRes: []cloud.Resource{i1, i2},
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.And(match.Property("Subnet", "s1"), match.Property(properties.ID, "i2"))),
+			expectRes: []cloud.Resource{i2},
+		},
+		{
+			query:     cloud.NewQuery("subnet"),
+			expectRes: []cloud.Resource{s1, s2},
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ID", "s1")),
+			expectRes: []cloud.Resource{s1},
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.Property("Name", "nothing")),
+			expectRes: nil,
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ID", "S1")),
+			expectRes: nil,
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ID", "S1").IgnoreCase()),
+			expectRes: []cloud.Resource{s1},
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ActiveServicesCount", "42")),
+			expectRes: nil,
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ActiveServicesCount", "42").MatchString()),
+			expectRes: []cloud.Resource{s2},
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.Tag("TagKey1", "TagValue1")),
+			expectRes: []cloud.Resource{i1, i2},
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.TagKey("TagKey2")),
+			expectRes: []cloud.Resource{s1},
+		},
+		{
+			query:     cloud.NewQuery("vpc").Match(match.TagValue("TagValue2")),
+			expectRes: []cloud.Resource{v1},
+		},
+		{
+			query:     cloud.NewQuery("subnet", "vpc"),
+			expectRes: []cloud.Resource{s1, s2, v1},
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.And(match.Property(properties.ID, "i2"), match.Property(properties.Name, "redis"))),
+			expectRes: nil,
+		},
+		{
+			query:     cloud.NewQuery("instance").Match(match.Or(match.Property(properties.ID, "i2"), match.Property(properties.Name, "redis"))),
+			expectRes: []cloud.Resource{i1, i2},
 		},
 	}
-
-	if got, want := res.Properties, expected; !reflect.DeepEqual(got, want) {
-		t.Fatalf("got \n%#v\n\nwant \n%#v\n", got, want)
+	for i, tcase := range tcases {
+		res, err := g.Find(tcase.query)
+		if err != nil {
+			t.Fatalf("%d: %s", i+1, err)
+		}
+		sort.Slice(res, func(i int, j int) bool {
+			if res[i].Type() == res[j].Type() {
+				return res[i].Id() <= res[j].Id()
+			}
+			return res[i].Type() < res[j].Type()
+		})
+		if got, want := res, tcase.expectRes; !reflect.DeepEqual(got, want) {
+			t.Fatalf("%d: got %v, want %v", i+1, got, want)
+		}
 	}
 }
 
-func TestFindResources(t *testing.T) {
-	t.Parallel()
+func TestFindWithProperties(t *testing.T) {
 	g := NewGraph()
-
-	g.Unmarshal([]byte(`/instance<inst_1>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Id","Value":"inst_1"}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Name","Value":"redis"}"^^type:text
-  /instance<inst_2>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_2>  "property"@[] "{"Key":"Id","Value":"inst_2"}"^^type:text
-  /subnet<sub_1>  "has_type"@[] "/subnet"^^type:text
-  /subnet<sub_1>  "property"@[] "{"Key":"Name","Value":"redis"}"^^type:text`))
-
-	t.Run("FindResource", func(t *testing.T) {
-		t.Parallel()
-		res, err := g.FindResource("inst_1")
+	i1 := instResource("i1").prop("Name", "redis").prop("Subnet", "s1").prop(properties.Tags, []string{"TagKey1=TagValue1"}).build()
+	i2 := instResource("i2").prop("Subnet", "s1").prop(properties.Tags, []string{"TagKey1=TagValue1"}).build()
+	s1 := subResource("s1").prop(properties.Tags, []string{"TagKey2=TagValue2"}).build()
+	s2 := subResource("s2").prop("Name", "prod").prop("ActiveServicesCount", 42).build()
+	v1 := vpcResource("v1").prop("Name", "prod").prop(properties.Tags, []string{"TagKey2=TagValue2"}).build()
+	g.AddResource(i1, i2, s1, s2, v1)
+	tcases := []struct {
+		props     map[string]interface{}
+		expectRes []cloud.Resource
+	}{
+		{
+			props:     map[string]interface{}{"Name": "redis"},
+			expectRes: []cloud.Resource{i1},
+		},
+		{
+			props:     map[string]interface{}{"Name": "prod"},
+			expectRes: []cloud.Resource{s2, v1},
+		},
+		{
+			props:     map[string]interface{}{"Name": "nothing"},
+			expectRes: nil,
+		},
+	}
+	for i, tcase := range tcases {
+		res, err := g.FindWithProperties(tcase.props)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%d: %s", i+1, err)
 		}
-		if got, want := res.Properties["Name"], "redis"; got != want {
-			t.Fatalf("got %s want %s", got, want)
+		sort.Slice(res, func(i int, j int) bool {
+			if res[i].Type() == res[j].Type() {
+				return res[i].Id() <= res[j].Id()
+			}
+			return res[i].Type() < res[j].Type()
+		})
+		if got, want := res, tcase.expectRes; !reflect.DeepEqual(got, want) {
+			t.Fatalf("%d: got %v, want %v", i+1, got, want)
 		}
+	}
+}
 
-		if res, err = g.FindResource("none"); err != nil {
-			t.Fatal(err)
+func TestFindOne(t *testing.T) {
+	g := NewGraph()
+	i1 := instResource("i1").prop("Name", "redis").prop("Subnet", "s1").build()
+	i2 := instResource("i2").prop("Subnet", "s1").build()
+	s1 := subResource("s1").build()
+	v1 := vpcResource("s1").build()
+	g.AddResource(i1, i2, s1, v1)
+	tcases := []struct {
+		query             cloud.Query
+		expectRes         cloud.Resource
+		expectErrContains string
+	}{
+		{
+			query:     cloud.NewQuery("instance").Match(match.Property("Name", "redis")),
+			expectRes: i1,
+		},
+		{
+			query:             cloud.NewQuery("instance").Match(match.Property("Subnet", "s1")),
+			expectErrContains: "multiple",
+		},
+		{
+			query:     cloud.NewQuery("subnet"),
+			expectRes: s1,
+		},
+		{
+			query:     cloud.NewQuery("subnet").Match(match.Property("ID", "s1")),
+			expectRes: s1,
+		},
+		{
+			query:             cloud.NewQuery("instance").Match(match.Property("Name", "nothing")),
+			expectErrContains: "not found",
+		},
+	}
+	for i, tcase := range tcases {
+		res, err := g.FindOne(tcase.query)
+		if tcase.expectErrContains != "" {
+			if err == nil {
+				t.Fatalf("%d: expect error contains '%s', got nil", i+1, tcase.expectErrContains)
+			}
+			if !strings.Contains(err.Error(), tcase.expectErrContains) {
+				t.Fatalf("%d: expect error contains '%s', got %s", i+1, tcase.expectErrContains, err.Error())
+			}
+			continue
 		}
-		if res != nil {
-			t.Fatalf("expected nil got %v", res)
+		if err != nil {
+			t.Fatalf("%d: %s", i+1, err)
 		}
+		if got, want := res, tcase.expectRes; !reflect.DeepEqual(got, want) {
+			t.Fatalf("%d: got %v, want %v", i+1, got, want)
+		}
+	}
+}
 
-		if res, err = g.FindResource("sub_1"); err != nil {
-			t.Fatal(err)
+func TestResourceChildrenAndSiblings(t *testing.T) {
+	g := NewGraph()
+	v1 := InitResource("vpc", "vpc_1")
+	s1 := InitResource("subnet", "sub_1")
+	s2 := InitResource("subnet", "sub_2")
+	i1 := InitResource("instance", "inst_1")
+	i2 := InitResource("instance", "inst_2")
+	i3 := InitResource("instance", "inst_3")
+	sg1 := InitResource("securitygroup", "secgroup_1")
+	g.AddResource(v1, s1, s2, i1, i2, i3, sg1)
+	g.AddParentRelation(v1, s1)
+	g.AddParentRelation(v1, s2)
+	g.AddParentRelation(v1, sg1)
+	g.AddParentRelation(s1, i1)
+	g.AddParentRelation(s1, i2)
+	g.AddParentRelation(s2, i3)
+	g.AddAppliesOnRelation(sg1, i1)
+	g.AddAppliesOnRelation(sg1, i3)
+
+	t.Run("ResourceChildren", func(t *testing.T) {
+		tcases := []struct {
+			from         cloud.Resource
+			relation     string
+			recursive    bool
+			expRelations []cloud.Resource
+		}{
+			{from: v1, relation: rdf.ChildrenOfRel, recursive: false, expRelations: []cloud.Resource{sg1, s1, s2}},
+			{from: v1, relation: rdf.ChildrenOfRel, recursive: true, expRelations: []cloud.Resource{i1, i2, i3, sg1, s1, s2}},
+			{from: s1, relation: rdf.ChildrenOfRel, recursive: false, expRelations: []cloud.Resource{i1, i2}},
+			{from: s1, relation: rdf.ParentOf, recursive: false, expRelations: []cloud.Resource{v1}},
+			{from: i1, relation: rdf.ParentOf, recursive: false, expRelations: []cloud.Resource{s1}},
+			{from: i1, relation: rdf.ParentOf, recursive: true, expRelations: []cloud.Resource{s1, v1}},
+			{from: i1, relation: rdf.DependingOnRel, recursive: false, expRelations: []cloud.Resource{sg1}},
+			{from: sg1, relation: rdf.ApplyOn, recursive: false, expRelations: []cloud.Resource{i1, i3}},
 		}
-		if got, want := res.Type().String(), "subnet"; got != want {
-			t.Fatalf("got %s want %s", got, want)
+		for i, tcase := range tcases {
+			res, err := g.ResourceRelations(tcase.from, tcase.relation, tcase.recursive)
+			if err != nil {
+				t.Fatalf("%d: %s", i+1, err)
+			}
+			sort.Slice(res, func(i int, j int) bool {
+				if res[i].Type() == res[j].Type() {
+					return res[i].Id() <= res[j].Id()
+				}
+				return res[i].Type() < res[j].Type()
+			})
+			if got, want := res, tcase.expRelations; !reflect.DeepEqual(got, want) {
+				t.Fatalf("%d: got %v, want %v", i+1, got, want)
+			}
 		}
 	})
-	t.Run("FindResourcesByProperty", func(t *testing.T) {
-		t.Parallel()
-		res, err := g.FindResourcesByProperty("Id", "inst_1")
-		if err != nil {
-			t.Fatal(err)
+
+	t.Run("ResourceSiblings", func(t *testing.T) {
+		tcases := []struct {
+			from        cloud.Resource
+			expSiblings []cloud.Resource
+		}{
+			{from: v1, expSiblings: nil},
+			{from: s1, expSiblings: []cloud.Resource{s2}},
+			{from: s2, expSiblings: []cloud.Resource{s1}},
+			{from: i1, expSiblings: []cloud.Resource{i2}},
 		}
-		expected := []*Resource{
-			{id: "inst_1", kind: Instance, Properties: map[string]interface{}{"Id": interface{}("inst_1"), "Name": interface{}("redis")}, Meta: make(Properties)},
-		}
-		if got, want := len(res), len(expected); got != want {
-			t.Fatalf("got %d want %d", got, want)
-		}
-		if got, want := res[0], expected[0]; !reflect.DeepEqual(got, want) {
-			t.Fatalf("got %+v want %+v", got, want)
-		}
-		res, err = g.FindResourcesByProperty("Name", "redis")
-		if err != nil {
-			t.Fatal(err)
-		}
-		expected = []*Resource{
-			{id: "inst_1", kind: Instance, Properties: map[string]interface{}{"Id": "inst_1", "Name": "redis"}, Meta: make(Properties)},
-			{id: "sub_1", kind: Subnet, Properties: map[string]interface{}{"Name": "redis"}, Meta: make(Properties)},
-		}
-		if got, want := len(res), len(expected); got != want {
-			t.Fatalf("got %d want %d", got, want)
-		}
-		if res[0].Id() == expected[0].Id() {
-			if got, want := res[0], expected[0]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("got %+v want %+v", got, want)
+		for i, tcase := range tcases {
+			res, err := g.ResourceSiblings(tcase.from)
+			if err != nil {
+				t.Fatalf("%d: %s", i+1, err)
 			}
-			if got, want := res[1], expected[1]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("got %+v want %+v", got, want)
-			}
-		} else {
-			if got, want := res[0], expected[1]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("got %+v want %+v", got, want)
-			}
-			if got, want := res[1], expected[0]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("got %+v want %+v", got, want)
+			if got, want := res, tcase.expSiblings; !reflect.DeepEqual(got, want) {
+				t.Fatalf("%d: got %v, want %v", i+1, got, want)
 			}
 		}
 	})
-}
-
-func TestGetAllResources(t *testing.T) {
-	g := NewGraph()
-
-	g.Unmarshal([]byte(`/instance<inst_1>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Id","Value":"inst_1"}"^^type:text
-  /instance<inst_1>  "property"@[] "{"Key":"Name","Value":"redis"}"^^type:text
-  /instance<inst_2>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_2>  "property"@[] "{"Key":"Id","Value":"inst_2"}"^^type:text
-  /instance<inst_2>  "property"@[] "{"Key":"Name","Value":"redis2"}"^^type:text
-  /instance<inst_3>  "has_type"@[] "/instance"^^type:text
-  /instance<inst_3>  "property"@[] "{"Key":"Id","Value":"inst_3"}"^^type:text
-  /instance<inst_3>  "property"@[] "{"Key":"Name","Value":"redis3"}"^^type:text
-  /instance<inst_3>  "property"@[] "{"Key":"CreationDate","Value":"2017-01-10T16:47:18Z"}"^^type:text
-  /instance<subnet>  "has_type"@[] "/subnet"^^type:text
-  /instance<subnet>  "property"@[] "{"Key":"Id","Value":"my subnet"}"^^type:text`))
-
-	time, _ := time.Parse(time.RFC3339, "2017-01-10T16:47:18Z")
-
-	expected := []*Resource{
-		{kind: Instance, id: "inst_1", Properties: Properties{"Id": "inst_1", "Name": "redis"}},
-		{kind: Instance, id: "inst_2", Properties: Properties{"Id": "inst_2", "Name": "redis2"}},
-		{kind: Instance, id: "inst_3", Properties: Properties{"Id": "inst_3", "Name": "redis3", "CreationDate": time}},
-	}
-	res, err := g.GetAllResources(Instance)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := len(res), len(expected); got != want {
-		t.Fatalf("got %d want %d", got, want)
-	}
-	for _, r := range expected {
-		found := false
-		for _, r2 := range res {
-			if r2.kind == r.kind && r2.id == r.id && reflect.DeepEqual(r2.Properties, r.Properties) {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("%+v not found", r)
-		}
-	}
-}
-
-func TestLoadIpPermissions(t *testing.T) {
-	g := NewGraph()
-	g.Unmarshal([]byte(`/securitygroup<sg-1234>	"has_type"@[]	"/securitygroup"^^type:text
-/securitygroup<sg-1234>	"property"@[]	"{"Key":"Id","Value":"sg-1234"}"^^type:text
-/securitygroup<sg-1234>	"property"@[]	"{"Key":"InboundRules","Value":[{"PortRange":{"FromPort":22,"ToPort":22,"Any":false},"Protocol":"tcp","IPRanges":[{"IP":"10.10.0.0","Mask":"//8AAA=="}]},{"PortRange":{"FromPort":443,"ToPort":443,"Any":false},"Protocol":"tcp","IPRanges":[{"IP":"0.0.0.0","Mask":"AAAAAA=="}]}]}"^^type:text
-/securitygroup<sg-1234>	"property"@[]	"{"Key":"OutboundRules","Value":[{"PortRange":{"FromPort":0,"ToPort":0,"Any":true},"Protocol":"any","IPRanges":[{"IP":"0.0.0.0","Mask":"AAAAAA=="}]}]}"^^type:text`))
-	expected := []*Resource{
-		{kind: SecurityGroup, id: "sg-1234", Properties: Properties{
-			"Id": "sg-1234",
-			"InboundRules": []*FirewallRule{
-				{
-					PortRange: PortRange{FromPort: int64(22), ToPort: int64(22), Any: false},
-					Protocol:  "tcp",
-					IPRanges:  []*net.IPNet{{IP: net.IPv4(10, 10, 0, 0), Mask: net.CIDRMask(16, 32)}},
-				},
-				{
-					PortRange: PortRange{FromPort: int64(443), ToPort: int64(443), Any: false},
-					Protocol:  "tcp",
-					IPRanges:  []*net.IPNet{{IP: net.IPv4(0, 0, 0, 0), Mask: net.CIDRMask(0, 32)}},
-				},
-			},
-			"OutboundRules": []*FirewallRule{
-				{
-					PortRange: PortRange{Any: true},
-					Protocol:  "any",
-					IPRanges:  []*net.IPNet{{IP: net.IPv4(0, 0, 0, 0), Mask: net.CIDRMask(0, 32)}},
-				},
-			},
-		},
-		},
-	}
-	res, err := g.GetAllResources(SecurityGroup)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := len(res), len(expected); got != want {
-		t.Fatalf("got %d want %d", got, want)
-	}
-	if got, want := res[0].id, expected[0].id; got != want {
-		t.Fatalf("got %s want %s", got, want)
-	}
-	if got, want := res[0].kind, expected[0].kind; got != want {
-		t.Fatalf("got %s want %s", got, want)
-	}
-	if got, want := len(res[0].Properties), len(expected[0].Properties); got != want {
-		t.Fatalf("got %d want %d", got, want)
-	}
-	for k := range expected[0].Properties {
-		if got, want := fmt.Sprintf("%T", res[0].Properties[k]), fmt.Sprintf("%T", expected[0].Properties[k]); got != want {
-			t.Fatalf("got %s want %s", got, want)
-		}
-	}
 }

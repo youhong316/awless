@@ -23,8 +23,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/graph"
+	"github.com/wallix/awless/config"
 	"github.com/wallix/awless/inspect"
+	"github.com/wallix/awless/logger"
 	"github.com/wallix/awless/sync"
 )
 
@@ -39,12 +40,12 @@ func init() {
 }
 
 var inspectCmd = &cobra.Command{
-	Use: "inspect",
-	Short: fmt.Sprintf(
-		"Inspecting your infrastructure using available inspectors below: %s", allInspectors(),
-	),
-	PersistentPreRun:   applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, checkStatsHook),
-	PersistentPostRunE: saveHistoryHook,
+	Use:               "inspect",
+	Short:             "Analyze your infrastructure through inspectors",
+	Long:              fmt.Sprintf("Basic proof of concept inspectors to analyze your infrastructure: %s", allInspectors()),
+	Example:           "  awless inspect -i bucket_sizer\n  awless inspect -i pricer\n  awless inspect -i port_scanner",
+	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, firstInstallDoneHook),
+	PersistentPostRun: applyHooks(verifyNewVersionHook, onVersionUpgrade, networkMonitorHook),
 
 	RunE: func(c *cobra.Command, args []string) error {
 		inspector, ok := inspect.InspectorsRegister[inspectorFlag]
@@ -52,31 +53,22 @@ var inspectCmd = &cobra.Command{
 			return fmt.Errorf("command needs a valid inspector: %s", allInspectors())
 		}
 
-		var graphs []*graph.Graph
-		if localFlag {
-			for _, name := range inspector.Services() {
-				graphs = append(graphs, sync.LoadCurrentLocalGraph(name))
-			}
-		} else {
-			var err error
-			services := []cloud.Service{}
-			for _, name := range inspector.Services() {
-				srv, ok := cloud.ServiceRegistry[name]
-				if !ok {
-					return fmt.Errorf("unknown service %s for inspector %s", name, inspector.Name())
-				}
+		if !localGlobalFlag {
+			logger.Info("Running full sync before inspection (disable it with --local flag)\n")
+			var services []cloud.Service
+			for _, srv := range cloud.ServiceRegistry {
 				services = append(services, srv)
 			}
 
-			graphPerService, err := sync.DefaultSyncer.Sync(services...)
-			exitOn(err)
-			for _, g := range graphPerService {
-				graphs = append(graphs, g)
+			if _, err := sync.DefaultSyncer.Sync(services...); err != nil {
+				logger.Verbose(err)
 			}
 		}
 
-		err := inspector.Inspect(graphs...)
+		g, err := sync.LoadLocalGraphs(config.GetAWSProfile(), config.GetAWSRegion())
 		exitOn(err)
+
+		exitOn(inspector.Inspect(g))
 
 		inspector.Print(os.Stdout)
 
@@ -86,7 +78,7 @@ var inspectCmd = &cobra.Command{
 
 func allInspectors() string {
 	var all []string
-	for name, _ := range inspect.InspectorsRegister {
+	for name := range inspect.InspectorsRegister {
 		all = append(all, name)
 	}
 	return strings.Join(all, ", ")

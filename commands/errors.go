@@ -20,17 +20,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/wallix/awless/database"
+	"github.com/fatih/color"
 )
 
 func exitOn(err error) {
 	if err != nil {
-		db, dberr, close := database.Current()
-		if dberr == nil && db != nil {
-			defer close()
-			db.AddLog(err.Error())
-		}
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		fmt.Fprintln(os.Stderr, color.RedString("[error]  "), err)
 		os.Exit(1)
 	}
 }
